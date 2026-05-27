@@ -74,14 +74,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "AutoSense AI Repair Platform" },
+      {
+        name: "description",
+        content:
+          "AI-powered automobile repair workflow platform connecting workshops, suppliers and admins across New Zealand.",
+      },
+      { name: "author", content: "AutoSense" },
+      { property: "og:title", content: "AutoSense AI Repair Platform" },
+      { property: "og:description", content: "AI-driven repair, quotation and supplier automation." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
