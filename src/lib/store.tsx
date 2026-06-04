@@ -1,4 +1,20 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  apiUserToApp,
+  fetchCurrentUser,
+  fetchWorkshopHistory,
+  fetchWorkshopInvoices,
+  fetchWorkshopQuotations,
+  fetchSupplierStock,
+  fetchSupplierQuotations,
+  fetchSupplierInvoices,
+  fetchSupplierPurchaseOrders,
+  getToken,
+  loginUser,
+  registerUser,
+  setToken,
+  ApiError,
+} from "./api";
 
 export type Role = "workshop" | "supplier" | "admin";
 
@@ -36,19 +52,34 @@ export interface Invoice {
   id: string;
   quotationId: string;
   workshopName: string;
+  vehicle?: string;
   parts: { name: string; qty: number; price: number }[];
   labourCost: number;
   total: number;
+  status?: string;
   createdAt: number;
 }
 
 export interface PurchaseOrder {
   id: string;
   quotationId: string;
+  workshopName?: string;
+  vehicle?: string;
   vendorEmail: string;
-  parts: { name: string; qty: number }[];
+  parts: { id?: string; name: string; qty: number; price?: number }[];
   urgency: "Standard" | "Urgent" | "Critical";
+  status?: string;
   createdAt: number;
+}
+
+export interface SupplierStockRow {
+  id: string;
+  partId: string;
+  partName: string;
+  vehicleModel: string;
+  description: string | null;
+  quantity: number;
+  price: number;
 }
 
 export interface LogEntry {
@@ -64,16 +95,12 @@ interface AppState {
   quotations: Quotation[];
   invoices: Invoice[];
   purchaseOrders: PurchaseOrder[];
+  supplierStock: SupplierStockRow[];
   logs: LogEntry[];
   stock: Record<string, { qty: number; price: number }>;
   smtp: { host: string; port: number; from: string };
+  authReady: boolean;
 }
-
-const DEFAULT_USERS: User[] = [
-  { id: "w1", email: "workshop@autosense.nz", name: "Auckland Auto Repairs", role: "workshop" },
-  { id: "s1", email: "supplier@autosense.nz", name: "NZ Parts Central", role: "supplier" },
-  { id: "a1", email: "admin@autosense.nz", name: "System Admin", role: "admin" },
-];
 
 const DEFAULT_STOCK: Record<string, { qty: number; price: number }> = {
   "Front Bumper": { qty: 4, price: 890 },
@@ -96,7 +123,7 @@ function loadState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...defaultState(), ...parsed };
+      return { ...defaultState(), ...parsed, authReady: false };
     }
   } catch {}
   return defaultState();
@@ -105,10 +132,11 @@ function loadState(): AppState {
 function defaultState(): AppState {
   return {
     user: null,
-    users: DEFAULT_USERS,
+    users: [],
     quotations: [],
     invoices: [],
     purchaseOrders: [],
+    supplierStock: [],
     logs: [
       {
         id: "l0",
@@ -119,51 +147,135 @@ function defaultState(): AppState {
     ],
     stock: DEFAULT_STOCK,
     smtp: { host: "smtp.autosense.nz", port: 587, from: "noreply@autosense.nz" },
+    authReady: false,
   };
 }
 
 interface StoreContext {
   state: AppState;
   setState: (updater: (s: AppState) => AppState) => void;
-  login: (email: string, role: Role) => User | null;
+  login: (email: string, password: string) => Promise<User>;
+  register: (name: string, email: string, password: string, role: Role) => Promise<User>;
   logout: () => void;
   addLog: (message: string, type?: LogEntry["type"]) => void;
+  refreshWorkshopData: () => Promise<void>;
+  refreshSupplierData: () => Promise<void>;
 }
 
 const Ctx = createContext<StoreContext | null>(null);
+
+function upsertUser(users: User[], user: User): User[] {
+  const idx = users.findIndex((u) => u.id === user.id);
+  if (idx >= 0) {
+    const next = [...users];
+    next[idx] = user;
+    return next;
+  }
+  return [...users, user];
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setStateRaw] = useState<AppState>(() => loadState());
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const { authReady: _authReady, ...persisted } = state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
     } catch {}
   }, [state]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreSession() {
+      const token = getToken();
+      if (!token) {
+        if (!cancelled) setStateRaw((s) => ({ ...s, user: null, authReady: true }));
+        return;
+      }
+      try {
+        const { user } = await fetchCurrentUser();
+        const appUser = apiUserToApp(user);
+        if (!cancelled) {
+          setStateRaw((s) => ({
+            ...s,
+            user: appUser,
+            users: upsertUser(s.users, appUser),
+            authReady: true,
+          }));
+        }
+      } catch {
+        setToken(null);
+        if (!cancelled) {
+          setStateRaw((s) => ({ ...s, user: null, authReady: true }));
+        }
+      }
+    }
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const setState = (updater: (s: AppState) => AppState) =>
     setStateRaw((prev) => updater(prev));
 
-  const login = (email: string, role: Role) => {
-    const existing = state.users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.role === role,
-    );
-    const user: User =
-      existing ?? {
-        id: `u${Date.now()}`,
-        email,
-        name: email.split("@")[0],
-        role,
-      };
+  const login = async (email: string, password: string) => {
+    const { token, user } = await loginUser(email, password);
+    setToken(token);
+    const appUser = apiUserToApp(user);
     setState((s) => ({
       ...s,
-      user,
-      users: existing ? s.users : [...s.users, user],
+      user: appUser,
+      users: upsertUser(s.users, appUser),
     }));
-    return user;
+    if (appUser.role === "workshop") {
+      try {
+        const [quotations, invoices, history] = await Promise.all([
+          fetchWorkshopQuotations(),
+          fetchWorkshopInvoices(),
+          fetchWorkshopHistory(),
+        ]);
+        setState((s) => ({
+          ...s,
+          quotations: quotations.map((q) => ({
+            ...q,
+            status: q.status as Quotation["status"],
+            severity: q.severity as Quotation["severity"],
+            recommendations: q.recommendations ?? [],
+          })),
+          invoices,
+          logs: history.length > 0 ? history : s.logs,
+        }));
+      } catch {
+        // ignore — user can refresh from workshop page
+      }
+    }
+    if (appUser.role === "supplier") {
+      try {
+        await refreshSupplierDataInternal(setState);
+      } catch {
+        // ignore
+      }
+    }
+    return appUser;
   };
 
-  const logout = () => setState((s) => ({ ...s, user: null }));
+  const register = async (name: string, email: string, password: string, role: Role) => {
+    const { user } = await registerUser({ name, email, password, role });
+    const appUser = apiUserToApp(user);
+    setState((s) => ({
+      ...s,
+      users: upsertUser(s.users, appUser),
+    }));
+    return appUser;
+  };
+
+  const logout = () => {
+    setToken(null);
+    setState((s) => ({ ...s, user: null }));
+  };
 
   const addLog: StoreContext["addLog"] = (message, type = "system") =>
     setState((s) => ({
@@ -174,8 +286,73 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ].slice(0, 200),
     }));
 
+  const refreshWorkshopData = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const [quotations, invoices, history] = await Promise.all([
+        fetchWorkshopQuotations(),
+        fetchWorkshopInvoices(),
+        fetchWorkshopHistory(),
+      ]);
+      setStateRaw((s) => ({
+        ...s,
+        quotations: quotations.map((q) => ({
+          ...q,
+          status: q.status as Quotation["status"],
+          severity: q.severity as Quotation["severity"],
+          recommendations: q.recommendations ?? [],
+        })),
+        invoices,
+        logs: history.length > 0 ? history : s.logs,
+      }));
+    } catch {
+      // workshop endpoints unavailable — keep local state
+    }
+  }, []);
+
+  async function refreshSupplierDataInternal(
+    setter: (updater: (s: AppState) => AppState) => void,
+  ) {
+    const [stock, quotations, invoices, purchaseOrders] = await Promise.all([
+      fetchSupplierStock(),
+      fetchSupplierQuotations(),
+      fetchSupplierInvoices(),
+      fetchSupplierPurchaseOrders(),
+    ]);
+    setter((s) => ({
+      ...s,
+      supplierStock: stock,
+      quotations: quotations.map((q) => ({
+        ...q,
+        photos: [],
+        status: q.status as Quotation["status"],
+        severity: q.severity as Quotation["severity"],
+        recommendations: q.recommendations ?? [],
+      })),
+      invoices: invoices.map((i) => ({
+        ...i,
+        parts: i.parts,
+      })),
+      purchaseOrders: purchaseOrders.map((po) => ({
+        ...po,
+        urgency: po.urgency as PurchaseOrder["urgency"],
+      })),
+    }));
+  }
+
+  const refreshSupplierData = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      await refreshSupplierDataInternal(setStateRaw);
+    } catch {
+      // supplier endpoints unavailable
+    }
+  }, []);
+
   return (
-    <Ctx.Provider value={{ state, setState, login, logout, addLog }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ state, setState, login, register, logout, addLog, refreshWorkshopData, refreshSupplierData }}>{children}</Ctx.Provider>
   );
 }
 
@@ -188,3 +365,5 @@ export function useStore() {
 export function uid(prefix = "id") {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
+
+export { ApiError };

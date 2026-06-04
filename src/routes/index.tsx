@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useStore, type Role } from "../lib/store";
+import { useStore, type Role, ApiError } from "../lib/store";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sparkles, Wrench, Factory, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
@@ -14,33 +15,73 @@ export const Route = createFileRoute("/")({
 });
 
 function LoginPage() {
-  const { state, login, addLog } = useStore();
+  const { state, login, register, addLog } = useStore();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("workshop@autosense.nz");
-  const [password, setPassword] = useState("demo1234");
+  const [tab, setTab] = useState<"signin" | "register">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("workshop");
-  const [detected, setDetected] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (state.user) {
+    if (state.authReady && state.user) {
       navigate({ to: `/${state.user.role}` });
     }
-  }, [state.user, navigate]);
+  }, [state.authReady, state.user, navigate]);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     if (!email || !password) {
       toast.error("Enter email and password");
       return;
     }
-    const user = login(email, role);
-    if (!user) return;
-    const label =
-      role === "workshop" ? "Workshop User Detected" : role === "supplier" ? "Supplier User Detected" : "Admin User Detected";
-    setDetected(label);
-    addLog(`${user.email} signed in as ${role}`, "user");
-    toast.success(label);
-    setTimeout(() => navigate({ to: `/${role}` }), 600);
+    setLoading(true);
+    try {
+      const user = await login(email, password);
+      addLog(`${user.email} signed in as ${user.role}`, "user");
+      toast.success(`Welcome back, ${user.name}`);
+      navigate({ to: `/${user.role}` });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Sign in failed";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name || !email || !password) {
+      toast.error("Enter name, email, and password");
+      return;
+    }
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    setLoading(true);
+    try {
+      const user = await register(name, email, password, role);
+      addLog(`New ${role} account registered: ${user.email}`, "user");
+      toast.success("Account created — sign in with your credentials");
+      setTab("signin");
+      setEmail(user.email);
+      setPassword("");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Registration failed";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!state.authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">
+        Loading…
+      </div>
+    );
   }
 
   return (
@@ -68,51 +109,104 @@ function LoginPage() {
 
         <Card className="shadow-xl border-slate-200">
           <CardHeader>
-            <CardTitle className="text-2xl">Sign in</CardTitle>
-            <CardDescription>Role-based access for the AutoSense platform</CardDescription>
+            <CardTitle className="text-2xl">AutoSense</CardTitle>
+            <CardDescription>Sign in or create an account</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <RadioGroup value={role} onValueChange={(v) => setRole(v as Role)} className="grid grid-cols-3 gap-2">
-                  {(["workshop", "supplier", "admin"] as Role[]).map((r) => (
-                    <label
-                      key={r}
-                      className={`flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer text-sm capitalize ${
-                        role === r ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200"
-                      }`}
+            <Tabs value={tab} onValueChange={(v) => setTab(v as "signin" | "register")}>
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="signin">Sign in</TabsTrigger>
+                <TabsTrigger value="register">Register</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="signin">
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? "Signing in…" : "Sign in"}
+                  </Button>
+                  <p className="text-xs text-slate-500">
+                    Your role is determined by your account after sign in.
+                  </p>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="register">
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full name</Label>
+                    <Input
+                      id="name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Auckland Auto Repairs"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reg-email">Email</Label>
+                    <Input
+                      id="reg-email"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reg-password">Password</Label>
+                    <Input
+                      id="reg-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <RadioGroup
+                      value={role}
+                      onValueChange={(v) => setRole(v as Role)}
+                      className="grid grid-cols-3 gap-2"
                     >
-                      <RadioGroupItem value={r} className="sr-only" />
-                      {r}
-                    </label>
-                  ))}
-                </RadioGroup>
-              </div>
-              {detected && (
-                <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
-                  {detected} — redirecting…
-                </div>
-              )}
-              <Button type="submit" className="w-full">Sign in</Button>
-              <div className="text-xs text-slate-500 leading-relaxed">
-                Demo accounts: <code>workshop@autosense.nz</code>,{" "}
-                <code>supplier@autosense.nz</code>, <code>admin@autosense.nz</code> (any password).
-              </div>
-            </form>
+                      {(["workshop", "supplier", "admin"] as Role[]).map((r) => (
+                        <label
+                          key={r}
+                          className={`flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer text-sm capitalize ${
+                            role === r ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200"
+                          }`}
+                        >
+                          <RadioGroupItem value={r} className="sr-only" />
+                          {r}
+                        </label>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? "Creating account…" : "Create account"}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>

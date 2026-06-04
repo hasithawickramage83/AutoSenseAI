@@ -5,11 +5,38 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Sparkles, LogOut, Bell } from "lucide-react";
 
-interface NavItem {
+export interface NavItem {
   label: string;
   to: string;
   hash?: string;
   icon: ReactNode;
+  section?: "users" | "parts";
+  children?: { label: string; hash: string }[];
+}
+
+export function normalizeHash(hash?: string) {
+  if (!hash) return "";
+  return hash.startsWith("#") ? hash : `#${hash}`;
+}
+
+function hashKey(hash?: string) {
+  return normalizeHash(hash).replace(/^#/, "");
+}
+
+function isPartManagementSection(hash: string) {
+  const key = hashKey(hash);
+  return key === "parts" || key.startsWith("parts-");
+}
+
+function isUserManagementSection(hash: string) {
+  const key = hashKey(hash);
+  return key === "users" || key === "";
+}
+
+function isNavSectionActive(item: NavItem, hash: string) {
+  if (item.section === "parts") return isPartManagementSection(hash);
+  if (item.section === "users") return isUserManagementSection(hash);
+  return false;
 }
 
 export function DashboardShell({
@@ -26,7 +53,9 @@ export function DashboardShell({
   const { state, logout } = useStore();
   const navigate = useNavigate();
   const routerState = useRouterState();
-  const currentHash = typeof window !== "undefined" ? window.location.hash : "";
+  const routerHash = routerState.location.hash ?? "";
+  const windowHash = typeof window !== "undefined" ? window.location.hash : "";
+  const currentHash = routerHash || windowHash;
 
   useEffect(() => {
     if (!state.user) {
@@ -56,23 +85,56 @@ export function DashboardShell({
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {nav.map((item) => {
-            const isActive =
+            const itemKey = hashKey(item.hash);
+            const currentKey = hashKey(currentHash);
+            const isParentActive =
               routerState.location.pathname === item.to &&
-              (item.hash ? currentHash === item.hash : !currentHash || currentHash === "");
+              (itemKey
+                ? item.children
+                  ? isPartManagementSection(currentHash)
+                  : currentKey === itemKey
+                : !currentKey || currentKey === "");
             return (
-              <Link
-                key={item.label}
-                to={item.to}
-                hash={item.hash}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition ${
-                  isActive
-                    ? "bg-blue-50 text-blue-700 font-medium"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {item.icon}
-                {item.label}
-              </Link>
+              <div key={item.label}>
+                <Link
+                  to={item.to}
+                  hash={item.children ? item.children[0]?.hash ?? item.hash : item.hash}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition ${
+                    isParentActive
+                      ? "bg-blue-50 text-blue-700 font-medium"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {item.icon}
+                  {item.label}
+                </Link>
+                {item.children && isParentActive && (
+                  <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-200 pl-2">
+                    {item.children.map((child) => {
+                      const childKey = hashKey(child.hash);
+                      const isChildActive =
+                        routerState.location.pathname === item.to &&
+                        (currentKey === childKey ||
+                          (childKey === "parts-models" && currentKey === "parts") ||
+                          (childKey === "users" && currentKey === ""));
+                      return (
+                        <Link
+                          key={child.hash}
+                          to={item.to}
+                          hash={child.hash}
+                          className={`block px-3 py-1.5 rounded-md text-sm transition ${
+                            isChildActive
+                              ? "bg-blue-50 text-blue-700 font-medium"
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
