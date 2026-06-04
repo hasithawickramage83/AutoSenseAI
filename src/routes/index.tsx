@@ -7,7 +7,7 @@ import { Label } from "../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Sparkles, Wrench, Factory, ShieldCheck } from "lucide-react";
+import { Wrench, Factory, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
@@ -78,22 +78,26 @@ function LoginPage() {
 
   if (!state.authReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">
+      <div className="min-h-screen flex items-center justify-center bg-[var(--workshop-surface)] text-slate-600">
         Loading…
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-gradient-to-br from-[var(--workshop-surface)] via-white to-blue-50/80 flex items-center justify-center px-4 py-10">
       <div className="grid md:grid-cols-2 gap-8 max-w-5xl w-full items-center">
         <div className="hidden md:flex flex-col gap-6 pr-4">
-          <div className="flex items-center gap-2 text-blue-600">
-            <Sparkles className="h-6 w-6" />
-            <span className="font-semibold tracking-tight">AutoSense AI</span>
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--workshop-primary)] shadow-lg">
+              <Wrench className="h-5 w-5 text-white" />
+            </div>
+            <span className="font-semibold tracking-tight text-[var(--workshop-primary)]">
+              Vehicle Workshop Repair Center
+            </span>
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-slate-900">
-            AI-powered automobile repair, end-to-end.
+            Professional repair management, powered by AI.
           </h1>
           <p className="text-slate-600 leading-relaxed">
             Workshops upload damage, AI generates the quote, suppliers process inventory,
@@ -107,10 +111,10 @@ function LoginPage() {
           </div>
         </div>
 
-        <Card className="shadow-xl border-slate-200">
+        <Card className="shadow-xl border-slate-200/80">
           <CardHeader>
-            <CardTitle className="text-2xl">AutoSense</CardTitle>
-            <CardDescription>Sign in or create an account</CardDescription>
+            <CardTitle className="text-2xl text-[var(--workshop-primary)]">Sign in</CardTitle>
+            <CardDescription>Access your workshop, supplier, or admin portal</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs value={tab} onValueChange={(v) => setTab(v as "signin" | "register")}>
@@ -141,7 +145,11 @@ function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
+                  <Button
+                    type="submit"
+                    className="w-full bg-[var(--workshop-primary)] hover:bg-[var(--workshop-primary-dark)]"
+                    disabled={loading}
+                  >
                     {loading ? "Signing in…" : "Sign in"}
                   </Button>
                   <p className="text-xs text-slate-500">
@@ -192,7 +200,9 @@ function LoginPage() {
                         <label
                           key={r}
                           className={`flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer text-sm capitalize ${
-                            role === r ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200"
+                            role === r
+                              ? "border-[var(--workshop-primary)] bg-blue-50 text-[var(--workshop-primary)]"
+                              : "border-slate-200"
                           }`}
                         >
                           <RadioGroupItem value={r} className="sr-only" />
@@ -216,8 +226,8 @@ function LoginPage() {
 
 function Feature({ icon, title, sub }: { icon: React.ReactNode; title: string; sub: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="text-blue-600">{icon}</div>
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:shadow-md">
+      <div className="text-[var(--workshop-primary)]">{icon}</div>
       <div className="font-medium text-sm text-slate-900 mt-1">{title}</div>
       <div className="text-xs text-slate-500">{sub}</div>
     </div>
