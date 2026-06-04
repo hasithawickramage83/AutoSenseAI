@@ -14,6 +14,7 @@ function paymentStatus(inv: Invoice): "Paid" | "Partially Paid" | "Pending" | "O
   if (s === "paid") return "Paid";
   if (s.includes("partial")) return "Partially Paid";
   if (s === "overdue") return "Overdue";
+  if (s === "sent") return "Pending";
   return "Pending";
 }
 
@@ -25,9 +26,12 @@ export function InvoicesSection() {
   const summary = useMemo(() => {
     const total = state.invoices.reduce((s, i) => s + i.total, 0);
     const paid = state.invoices
-      .filter((i) => paymentStatus(i) === "Paid")
+      .filter((i) => i.status?.toLowerCase() === "paid")
       .reduce((s, i) => s + i.total, 0);
-    return { total, paid, outstanding: total - paid };
+    const outstanding = state.invoices
+      .filter((i) => i.status?.toLowerCase() === "sent")
+      .reduce((s, i) => s + i.total, 0);
+    return { total, paid, outstanding };
   }, [state.invoices]);
 
   const filtered = useMemo(() => {
@@ -132,7 +136,7 @@ export function InvoicesSection() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-mono text-sm font-semibold text-slate-900">{inv.id}</p>
-                        <p className="text-xs text-slate-500">Ref: {inv.quotationId.slice(0, 12)}</p>
+                        <p className="text-xs text-slate-500">Ref: {inv.quotationId}</p>
                       </div>
                       <InvoiceStatusBadge status={status} />
                     </div>

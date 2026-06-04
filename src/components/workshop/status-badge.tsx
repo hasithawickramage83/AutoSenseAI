@@ -7,6 +7,7 @@ const quotationStyles: Record<string, string> = {
   Approved: "bg-emerald-50 text-emerald-800 border-emerald-200",
   "PO Raised": "bg-blue-50 text-blue-800 border-blue-200",
   Invoiced: "bg-[var(--workshop-primary)]/10 text-[var(--workshop-primary)] border-[var(--workshop-primary)]/20",
+  Completed: "bg-[var(--workshop-primary)]/10 text-[var(--workshop-primary)] border-[var(--workshop-primary)]/20",
   Rejected: "bg-red-50 text-red-700 border-red-200",
 };
 
@@ -18,14 +19,15 @@ const invoiceStyles: Record<string, string> = {
 };
 
 export function QuotationStatusBadge({ status }: { status: string }) {
+  const label = status === "Invoiced" ? "Completed" : status;
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        quotationStyles[status] ?? quotationStyles.Pending,
+        quotationStyles[status === "Invoiced" ? "Completed" : status] ?? quotationStyles.Pending,
       )}
     >
-      {status}
+      {label}
     </span>
   );
 }

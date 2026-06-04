@@ -54,18 +54,21 @@ export function OverviewSection({ onUpload, onViewQuotations }: { onUpload: () =
     const paidAmount = invoices
       .filter((i) => i.status?.toLowerCase() === "paid")
       .reduce((s, i) => s + i.total, 0);
+    const outstandingAmount = invoices
+      .filter((i) => i.status?.toLowerCase() === "sent")
+      .reduce((s, i) => s + i.total, 0);
     return {
       totalQuotes: quotes.length,
       pending,
       approved,
       totalInvoices: invoices.length,
       paidInvoices: invoices.filter((i) => i.status?.toLowerCase() === "paid").length,
-      outstandingInvoices: invoices.filter((i) => i.status?.toLowerCase() !== "paid").length,
+      outstandingInvoices: invoices.filter((i) => i.status?.toLowerCase() === "sent").length,
       totalUploads: quotes.length,
       invoicedJobs,
       totalAmount,
       paidAmount,
-      outstandingAmount: totalAmount - paidAmount,
+      outstandingAmount,
     };
   }, [quotes, invoices]);
 
@@ -99,7 +102,7 @@ export function OverviewSection({ onUpload, onViewQuotations }: { onUpload: () =
       items.push({
         id: `i-${inv.id}`,
         type: "invoice",
-        message: `Invoice ${inv.id.slice(0, 8)} — NZD $${inv.total.toLocaleString()}`,
+        message: `Invoice ${inv.id} — NZD $${inv.total.toLocaleString()}`,
         at: inv.createdAt,
       }),
     );

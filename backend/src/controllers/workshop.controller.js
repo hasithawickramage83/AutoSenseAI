@@ -1,5 +1,10 @@
 import { prisma } from "../config/db.js";
 import { addActivityLog, severityFromPartCount } from "../utils/activityLog.js";
+import { parseIntId } from "../utils/parseId.js";
+
+function workshopIdFromReq(req) {
+  return parseIntId(req.user.userId) ?? Number(req.user.userId);
+}
 
 function mapQuotation(q) {
   return {
@@ -27,6 +32,7 @@ function mapInvoice(inv) {
     id: inv.id,
     quotationId: inv.quotationId,
     workshopName: inv.workshop?.name ?? inv.quotation?.workshop?.name ?? "",
+    vehicle: inv.quotation?.vehicle ?? "",
     parts: lineItems.map((line) => ({
       name: line.partName,
       qty: line.quantity ?? 1,
@@ -34,13 +40,14 @@ function mapInvoice(inv) {
     })),
     labourCost: inv.labourCost,
     total: inv.total,
+    status: inv.status,
     createdAt: inv.createdAt.getTime(),
   };
 }
 
 export const getQuotations = async (req, res) => {
   try {
-    const workshopId = req.user.userId;
+    const workshopId = workshopIdFromReq(req);
     const rows = await prisma.quotation.findMany({
       where: { workshopId },
       include: {
@@ -58,7 +65,7 @@ export const getQuotations = async (req, res) => {
 
 export const getInvoices = async (req, res) => {
   try {
-    const workshopId = req.user.userId;
+    const workshopId = workshopIdFromReq(req);
     const rows = await prisma.invoice.findMany({
       where: { workshopId, status: "Sent" },
       include: {
@@ -75,7 +82,7 @@ export const getInvoices = async (req, res) => {
 
 export const getHistory = async (req, res) => {
   try {
-    const workshopId = req.user.userId;
+    const workshopId = workshopIdFromReq(req);
     const rows = await prisma.activityLog.findMany({
       where: { userId: workshopId },
       orderBy: { createdAt: "desc" },
@@ -83,7 +90,7 @@ export const getHistory = async (req, res) => {
     });
     res.json(
       rows.map((l) => ({
-        id: l.id,
+        id: String(l.id),
         message: l.message,
         type: l.type,
         createdAt: l.createdAt.getTime(),
@@ -96,7 +103,7 @@ export const getHistory = async (req, res) => {
 
 export const updateQuotation = async (req, res) => {
   try {
-    const workshopId = req.user.userId;
+    const workshopId = workshopIdFromReq(req);
     const { id } = req.params;
     const { vehicle, description, parts } = req.body;
 
@@ -135,7 +142,7 @@ export const updateQuotation = async (req, res) => {
       },
     });
 
-    await addActivityLog(workshopId, `Quotation ${id.slice(0, 8)} updated`, "user");
+    await addActivityLog(workshopId, `Quotation ${id} updated`, "user");
 
     res.json(mapQuotation(updated));
   } catch (error) {
@@ -145,7 +152,7 @@ export const updateQuotation = async (req, res) => {
 
 export const deleteQuotation = async (req, res) => {
   try {
-    const workshopId = req.user.userId;
+    const workshopId = workshopIdFromReq(req);
     const { id } = req.params;
 
     const existing = await prisma.quotation.findFirst({
@@ -167,7 +174,7 @@ export const deleteQuotation = async (req, res) => {
       prisma.quotation.delete({ where: { id } }),
     ]);
 
-    await addActivityLog(workshopId, `Quotation ${id.slice(0, 8)} deleted`, "user");
+    await addActivityLog(workshopId, `Quotation ${id} deleted`, "user");
 
     res.json({ message: "Quotation deleted" });
   } catch (error) {

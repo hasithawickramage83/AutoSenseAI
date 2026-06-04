@@ -1,235 +1,118 @@
 generator client {
-
   provider = "prisma-client-js"
-
 }
-
-
 
 datasource db {
-
-  provider = "postgresql"
-
-  url      = env("DATABASE_URL")
-
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
-
-
 
 enum UserRole {
-
   ADMIN
-
   WORKSHOP
-
   SUPPLIER
-
 }
-
-
 
 model User {
-
-  id           String        @id @default(uuid())
-
+  id           Int           @id @default(autoincrement())
   name         String
-
   email        String        @unique
-
   password     String
-
   role         UserRole
-
   createdAt    DateTime      @default(now())
-
   quotations   Quotation[]
-
   invoices     Invoice[]
-
   activityLogs ActivityLog[]
-
 }
-
-
 
 model VehicleModel {
-
-  id    String @id @default(uuid())
-
+  id    Int    @id @default(autoincrement())
   name  String @unique
-
   parts Part[]
-
 }
-
-
 
 model Part {
-
-  id             String       @id @default(uuid())
-
+  id             Int          @id @default(autoincrement())
   name           String
-
   description    String?
-
   activeStatus   Int          @default(1)
-
-  vehicleModelId String
-
+  vehicleModelId Int
   vehicleModel   VehicleModel @relation(fields: [vehicleModelId], references: [id])
-
   stocks         Stock[]
-
 }
-
-
 
 model Stock {
-
-  id       String @id @default(uuid())
-
+  id       Int   @id @default(autoincrement())
   quantity Int
-
   price    Float
-
-  partId   String @unique
-
-  part     Part   @relation(fields: [partId], references: [id])
-
+  partId   Int   @unique
+  part     Part  @relation(fields: [partId], references: [id])
 }
-
-
 
 model Quotation {
-
-  id              String          @id @default(uuid())
-
-  workshopId      String
-
+  id              String          @id
+  workshopId      Int
   workshop        User            @relation(fields: [workshopId], references: [id])
-
   vehicle         String
-
   description     String
-
   inputText       String
-
   aiResult        Json
-
   parts           Json
-
   damages         Json
-
   recommendations Json
-
   severity        String          @default("Medium")
-
   labourCost      Float           @default(0)
-
   status          String          @default("Pending")
-
   createdAt       DateTime        @default(now())
-
   updatedAt       DateTime        @updatedAt
-
   invoice         Invoice?
-
   purchaseOrders  PurchaseOrder[]
-
   damageReport    DamageReport?
-
 }
-
-
 
 model Invoice {
-
-  id          String    @id @default(uuid())
-
+  id          String    @id
   quotationId String    @unique
-
   quotation   Quotation @relation(fields: [quotationId], references: [id])
-
-  workshopId  String
-
+  workshopId  Int
   workshop    User      @relation(fields: [workshopId], references: [id])
-
   lineItems   Json
-
   labourCost  Float     @default(0)
-
   total       Float
-
   status      String    @default("Draft")
-
   createdAt   DateTime  @default(now())
-
-  updatedAt   DateTime  @default(now()) @updatedAt
-
+  updatedAt   DateTime  @updatedAt
 }
-
-
 
 model PurchaseOrder {
-
-  id          String     @id @default(uuid())
-
+  id          String     @id
   quotationId String?
-
   quotation   Quotation? @relation(fields: [quotationId], references: [id])
-
   partName    String
-
   quantity    Int
-
   price       Float      @default(0)
-
   vendorEmail String     @default("vendor@nzparts-supply.co.nz")
-
   urgency     String     @default("Standard")
-
   status      String     @default("Draft")
-
   createdAt   DateTime   @default(now())
-
-  updatedAt   DateTime   @default(now()) @updatedAt
-
+  updatedAt   DateTime   @updatedAt
 }
-
-
 
 model DamageReport {
-
-  id          String     @id @default(uuid())
-
-  quotationId String?    @unique
-
+  id          Int       @id @default(autoincrement())
+  quotationId String?   @unique
   quotation   Quotation? @relation(fields: [quotationId], references: [id])
-
   inputText   String
-
   aiResult    Json
-
-  createdAt   DateTime   @default(now())
-
+  createdAt   DateTime  @default(now())
 }
-
-
 
 model ActivityLog {
-
-  id        String   @id @default(uuid())
-
-  userId    String?
-
+  id        Int      @id @default(autoincrement())
+  userId    Int?
   user      User?    @relation(fields: [userId], references: [id])
-
   message   String
-
   type      String
-
   createdAt DateTime @default(now())
-
 }
-
-

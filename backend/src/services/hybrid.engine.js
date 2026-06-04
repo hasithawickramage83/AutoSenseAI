@@ -1,19 +1,21 @@
 import { prisma } from "../config/db.js";
 import { normalizePart } from "../utils/normalizePart.js";
 
+/**
+ * Match parts to supplier stock. Invoice includes all requested parts.
+ * In-stock lines use catalog price; out-of-stock lines use $0 on the invoice.
+ * POs are created only for unavailable parts (price from DB or 0).
+ */
 export const hybridEngine = async (aiResult) => {
   const result = {
     invoice: [],
-    purchaseOrders: []
+    purchaseOrders: [],
+    allInStock: true,
   };
 
   const { vehicleModel, parts } = aiResult;
 
-  for (let part of parts) {
-
-    console.log("Part:", part);
-    // console.log("Vehicle:", vehicleModel);
-
+  for (const part of parts) {
     const cleanPart = normalizePart(part);
 
     const stockItem = await prisma.stock.findFirst({
@@ -21,39 +23,45 @@ export const hybridEngine = async (aiResult) => {
         part: {
           name: {
             contains: cleanPart,
-            mode: "insensitive"
+            mode: "insensitive",
           },
           vehicleModel: {
             name: {
               contains: vehicleModel || "",
-              mode: "insensitive"
-            }
+              mode: "insensitive",
+            },
           },
-          activeStatus: 1
-        }
+          activeStatus: 1,
+        },
       },
       include: {
         part: {
           include: {
-            vehicleModel: true
-          }
-        }
-      }
+            vehicleModel: true,
+          },
+        },
+      },
     });
 
-    // ALWAYS generate invoice
+    const catalogPrice = stockItem ? Number(stockItem.price) : 0;
+    const inStock = Boolean(stockItem && stockItem.quantity > 0);
+    const partName = `${vehicleModel || "Unknown"} ${cleanPart}`;
+
     result.invoice.push({
-      partName: `${vehicleModel || "Unknown"} ${cleanPart}`,
+      partName,
       quantity: 1,
-      price: stockItem ? stockItem.price : 150
+      price: inStock ? catalogPrice : 0,
+      inStock,
+      stockId: stockItem?.id ?? null,
     });
 
-    // IF NOT AVAILABLE → create PO
-    if (!stockItem || stockItem.quantity <= 0) {
+    if (!inStock) {
+      result.allInStock = false;
       result.purchaseOrders.push({
-        partName: `${vehicleModel || "Unknown"} ${cleanPart}`,
+        partName,
         quantity: 1,
-        status: "PENDING"
+        price: catalogPrice,
+        stockId: stockItem?.id ?? null,
       });
     }
   }

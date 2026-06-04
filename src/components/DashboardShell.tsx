@@ -30,7 +30,7 @@ export interface NavItem {
   to: string;
   hash?: string;
   icon: ReactNode;
-  section?: "users" | "parts";
+  section?: string;
   children?: { label: string; hash: string }[];
 }
 
@@ -60,6 +60,16 @@ function isNavSectionActive(item: NavItem, hash: string, pathname: string) {
     if (pathname !== item.to) return false;
     if (itemKey === "dashboard" && (!currentKey || currentKey === "dashboard")) return true;
     return currentKey === itemKey;
+  }
+  if (item.section === "inventory") return hashKey(hash) === "inventory";
+  if (item.section === "quotations") {
+    const k = hashKey(hash);
+    return k === "requests" || k === "quotations-all";
+  }
+  if (item.section === "supplier-inventory") return hashKey(hash) === "stock";
+  if (item.section === "billing") {
+    const k = hashKey(hash);
+    return k === "invoices" || k === "invoices-all" || k === "pos" || k === "pos-all";
   }
   if (item.section === "parts") return isPartManagementSection(hash);
   if (item.section === "users") return isUserManagementSection(hash);

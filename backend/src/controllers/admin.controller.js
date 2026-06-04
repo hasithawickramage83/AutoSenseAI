@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../config/db.js";
+import { parseIntId } from "../utils/parseId.js";
 
 const VALID_ROLES = ["ADMIN", "WORKSHOP", "SUPPLIER"];
 
@@ -64,7 +65,8 @@ export const createUser = async (req, res) => {
 
 export const updateUser = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseIntId(req.params.id);
+    if (id == null) return res.status(400).json({ message: "Invalid user id" });
     const { name, email, role, password } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { id } });
@@ -98,9 +100,10 @@ export const updateUser = async (req, res) => {
 
 export const deleteUser = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseIntId(req.params.id);
+    if (id == null) return res.status(400).json({ message: "Invalid user id" });
 
-    if (id === req.user.userId) {
+    if (id === Number(req.user.userId)) {
       return res.status(400).json({ message: "You cannot delete your own account" });
     }
 
@@ -151,7 +154,8 @@ export const createVehicleModel = async (req, res) => {
 
 export const updateVehicleModel = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseIntId(req.params.id);
+    if (id == null) return res.status(400).json({ message: "Invalid vehicle model id" });
     const { name } = req.body;
 
     if (!name?.trim()) {
@@ -176,7 +180,8 @@ export const updateVehicleModel = async (req, res) => {
 
 export const deleteVehicleModel = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseIntId(req.params.id);
+    if (id == null) return res.status(400).json({ message: "Invalid vehicle model id" });
 
     const partCount = await prisma.part.count({
       where: { vehicleModelId: id, activeStatus: 1 },
@@ -217,9 +222,10 @@ export const listParts = async (_req, res) => {
 
 export const createPart = async (req, res) => {
   try {
-    const { name, description, vehicleModelId } = req.body;
+    const { name, description, vehicleModelId: rawModelId } = req.body;
+    const vehicleModelId = parseIntId(rawModelId);
 
-    if (!name?.trim() || !vehicleModelId) {
+    if (!name?.trim() || vehicleModelId == null) {
       return res.status(400).json({ message: "Name and vehicle model are required" });
     }
 
@@ -245,13 +251,18 @@ export const createPart = async (req, res) => {
 
 export const updatePart = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, description, vehicleModelId } = req.body;
+    const id = parseIntId(req.params.id);
+    if (id == null) return res.status(400).json({ message: "Invalid part id" });
+    const { name, description, vehicleModelId: rawModelId } = req.body;
 
     const data = {};
     if (name?.trim()) data.name = name.trim();
     if (description !== undefined) data.description = description?.trim() || null;
-    if (vehicleModelId) {
+    if (rawModelId != null) {
+      const vehicleModelId = parseIntId(rawModelId);
+      if (vehicleModelId == null) {
+        return res.status(400).json({ message: "Invalid vehicle model id" });
+      }
       const model = await prisma.vehicleModel.findUnique({ where: { id: vehicleModelId } });
       if (!model) {
         return res.status(400).json({ message: "Vehicle model not found" });
@@ -275,7 +286,8 @@ export const updatePart = async (req, res) => {
 
 export const deletePart = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseIntId(req.params.id);
+    if (id == null) return res.status(400).json({ message: "Invalid part id" });
 
     const part = await prisma.part.update({
       where: { id },
@@ -311,9 +323,10 @@ export const listStock = async (_req, res) => {
 
 export const createStock = async (req, res) => {
   try {
-    const { partId, quantity, price } = req.body;
+    const { partId: rawPartId, quantity, price } = req.body;
+    const partId = parseIntId(rawPartId);
 
-    if (!partId || quantity == null || price == null) {
+    if (partId == null || quantity == null || price == null) {
       return res.status(400).json({ message: "Part, quantity, and price are required" });
     }
 
@@ -344,7 +357,8 @@ export const createStock = async (req, res) => {
 
 export const updateStock = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseIntId(req.params.id);
+    if (id == null) return res.status(400).json({ message: "Invalid stock id" });
     const { quantity, price } = req.body;
 
     const data = {};
@@ -368,9 +382,10 @@ export const updateStock = async (req, res) => {
 
 export const upsertStockByPart = async (req, res) => {
   try {
-    const { partId, quantity, price } = req.body;
+    const { partId: rawPartId, quantity, price } = req.body;
+    const partId = parseIntId(rawPartId);
 
-    if (!partId || quantity == null || price == null) {
+    if (partId == null || quantity == null || price == null) {
       return res.status(400).json({ message: "Part, quantity, and price are required" });
     }
 
@@ -389,7 +404,8 @@ export const upsertStockByPart = async (req, res) => {
 
 export const deleteStock = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseIntId(req.params.id);
+    if (id == null) return res.status(400).json({ message: "Invalid stock id" });
     await prisma.stock.delete({ where: { id } });
     res.json({ message: "Stock deleted" });
   } catch (err) {
@@ -402,3 +418,38 @@ export const deleteStock = async (req, res) => {
 
 // Legacy alias
 export const getInventory = listStock;
+
+export const getInventoryDashboard = async (_req, res) => {
+  try {
+    const rows = await prisma.stock.findMany({
+      include: { part: { include: { vehicleModel: true } } },
+      orderBy: { part: { name: "asc" } },
+    });
+
+    const items = rows.map((s) => ({
+      id: s.id,
+      partId: s.partId,
+      partName: s.part.name,
+      vehicleModel: s.part.vehicleModel.name,
+      quantity: s.quantity,
+      price: s.price,
+      value: s.quantity * s.price,
+      availability:
+        s.quantity <= 0 ? "out" : s.quantity <= 2 ? "low" : "ok",
+    }));
+
+    const outOfStock = items.filter((i) => i.availability === "out").length;
+    const lowStock = items.filter((i) => i.availability === "low").length;
+
+    res.json({
+      totalSkus: items.length,
+      inStock: items.length - outOfStock,
+      outOfStock,
+      lowStock,
+      totalValue: items.reduce((sum, i) => sum + i.value, 0),
+      items,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

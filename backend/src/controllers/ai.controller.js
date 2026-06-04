@@ -1,11 +1,14 @@
 import { analyzeDamage } from "../services/ai.service.js";
 import { prisma } from "../config/db.js";
+import { processQuotationById } from "../services/quotation.processor.js";
 import {
   addActivityLog,
   severityFromPartCount,
   buildDamages,
   buildRecommendations,
 } from "../utils/activityLog.js";
+import { nextQuotationId } from "../utils/documentIds.js";
+import { parseIntId } from "../utils/parseId.js";
 
 export const previewDamage = async (req, res) => {
   try {
@@ -41,7 +44,7 @@ export const previewDamage = async (req, res) => {
 export const processDamage = async (req, res) => {
   try {
     const { vehicle, description, text, selectedParts } = req.body;
-    const workshopId = req.user.userId;
+    const workshopId = parseIntId(req.user.userId) ?? Number(req.user.userId);
 
     const inputText =
       text?.trim() ||
@@ -77,8 +80,10 @@ export const processDamage = async (req, res) => {
     const labourCost = 350 + parts.length * 120;
 
     const saved = await prisma.$transaction(async (tx) => {
+      const quotationId = await nextQuotationId(tx);
       const quotation = await tx.quotation.create({
         data: {
+          id: quotationId,
           workshopId,
           vehicle: vehicle?.trim() || aiResult.vehicleModel || "Unknown vehicle",
           description: description?.trim() || inputText,
@@ -110,9 +115,32 @@ export const processDamage = async (req, res) => {
       "ai",
     );
 
+    let processing = null;
+    try {
+      processing = await processQuotationById(saved.quotation.id, { actorUserId: workshopId });
+    } catch (procErr) {
+      console.error("Auto-process quotation error:", procErr);
+    }
+
+    const quotationRow = processing
+      ? await prisma.quotation.findUnique({
+          where: { id: saved.quotation.id },
+          include: { invoice: true, purchaseOrders: true },
+        })
+      : saved.quotation;
+
     res.json({
       aiResult: filteredAiResult,
-      quotation: saved.quotation,
+      quotation: quotationRow ?? saved.quotation,
+      processing: processing
+        ? {
+            allInStock: processing.allInStock,
+            autoSent: processing.autoSent,
+            invoiceId: processing.invoice?.id,
+            quotationStatus: processing.quotation?.status,
+            purchaseOrderCount: processing.purchaseOrders?.length ?? 0,
+          }
+        : null,
     });
   } catch (error) {
     console.error("processDamage error:", error);

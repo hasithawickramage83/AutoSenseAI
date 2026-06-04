@@ -155,7 +155,16 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
       quotationSavedRef.current = true;
       await refreshWorkshopData();
       addLog(`Quotation submitted with ${selectedParts.size} part(s) (severity ${r.severity})`, "ai");
-      toast.success("Quotation submitted — awaiting supplier processing");
+      if (data.processing?.allInStock) {
+        addLog(`Invoice ${data.processing.invoiceId ?? ""} sent automatically`, "system");
+        toast.success("All parts in stock — invoice sent to your email and available under Invoices");
+      } else if (data.processing) {
+        toast.warning(
+          `Stock shortage — invoice queued at supplier (${data.processing.purchaseOrderCount} purchase order(s) created)`,
+        );
+      } else {
+        toast.success("Quotation submitted — supplier will process shortly");
+      }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Analysis failed";
       toast.error(msg);

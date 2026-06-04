@@ -1,11 +1,16 @@
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import dotenv from "dotenv";
+import { directDatabaseUrl } from "../src/config/databaseUrl.js";
 
 dotenv.config();
 
-const prisma = new PrismaClient();
-
+const seedUrl = process.env.DIRECT_URL || directDatabaseUrl(process.env.DATABASE_URL);
+const prisma = new PrismaClient({
+  datasources: {
+    db: { url: seedUrl },
+  },
+});
 const ADMIN = {
   name: process.env.ADMIN_NAME ?? "System Admin",
   email: (process.env.ADMIN_EMAIL ?? "admin@workshop.local").toLowerCase(),

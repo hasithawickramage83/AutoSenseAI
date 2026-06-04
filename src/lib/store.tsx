@@ -6,7 +6,7 @@ import {
   fetchWorkshopInvoices,
   fetchWorkshopQuotations,
   fetchSupplierStock,
-  fetchSupplierQuotations,
+  fetchSupplierAllQuotations,
   fetchSupplierInvoices,
   fetchSupplierPurchaseOrders,
   getToken,
@@ -316,7 +316,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   ) {
     const [stock, quotations, invoices, purchaseOrders] = await Promise.all([
       fetchSupplierStock(),
-      fetchSupplierQuotations(),
+      fetchSupplierAllQuotations(),
       fetchSupplierInvoices(),
       fetchSupplierPurchaseOrders(),
     ]);

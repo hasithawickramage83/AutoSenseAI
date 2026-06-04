@@ -4,6 +4,7 @@ import { authorizeRoles } from "../middleware/role.middleware.js";
 import {
   getStock,
   getQuotations,
+  getAllQuotations,
   processQuotation,
   getInvoices,
   updateInvoice,
@@ -19,6 +20,7 @@ router.use(authMiddleware, authorizeRoles("SUPPLIER"));
 
 router.get("/stock", getStock);
 router.get("/quotations", getQuotations);
+router.get("/quotations/all", getAllQuotations);
 router.post("/quotations/:id/process", processQuotation);
 router.get("/invoices", getInvoices);
 router.put("/invoices/:id", updateInvoice);

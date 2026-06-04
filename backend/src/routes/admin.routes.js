@@ -18,6 +18,7 @@ import {
   upsertStockByPart,
   deleteStock,
   getInventory,
+  getInventoryDashboard,
 } from "../controllers/admin.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { authorizeRoles } from "../middleware/role.middleware.js";
@@ -45,6 +46,7 @@ router.delete("/parts/:id", ...adminOnly, deletePart);
 
 // Stock
 router.get("/inventory", ...adminOnly, getInventory);
+router.get("/inventory/dashboard", ...adminOnly, getInventoryDashboard);
 router.get("/stock", ...adminOnly, listStock);
 router.post("/stock", ...adminOnly, createStock);
 router.put("/stock/:id", ...adminOnly, updateStock);

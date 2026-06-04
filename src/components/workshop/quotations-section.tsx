@@ -160,7 +160,7 @@ export function QuotationsSection() {
         parts: updated.parts,
       });
       await refreshWorkshopData();
-      addLog(`Quotation ${updated.id.slice(0, 8)} updated`, "user");
+      addLog(`Quotation ${updated.id} updated`, "user");
       toast.success("Quotation updated");
       setEditing(null);
     } catch (err) {
@@ -172,7 +172,7 @@ export function QuotationsSection() {
     try {
       await deleteWorkshopQuotation(id);
       await refreshWorkshopData();
-      addLog(`Quotation ${id.slice(0, 8)} deleted`, "user");
+      addLog(`Quotation ${id} deleted`, "user");
       toast.success("Quotation deleted");
       setDeleting(null);
     } catch (err) {
@@ -202,7 +202,7 @@ export function QuotationsSection() {
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="Pending">Pending</SelectItem>
               <SelectItem value="Approved">Approved</SelectItem>
-              <SelectItem value="Invoiced">Invoiced</SelectItem>
+              <SelectItem value="Invoiced">Completed</SelectItem>
               <SelectItem value="PO Raised">PO Raised</SelectItem>
             </SelectContent>
           </Select>

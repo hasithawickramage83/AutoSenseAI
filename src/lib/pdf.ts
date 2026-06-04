@@ -116,7 +116,7 @@ export function downloadQuotationPdf(q: QuotationPdfData) {
     });
   }
 
-  doc.save(`quotation-${q.id.slice(0, 8)}.pdf`);
+  doc.save(`quotation-${q.id}.pdf`);
 }
 
 export function downloadInvoicePdf(inv: InvoicePdfData) {
@@ -159,7 +159,7 @@ export function downloadInvoicePdf(inv: InvoicePdfData) {
     footStyles: { fillColor: [241, 245, 249] },
   });
 
-  doc.save(`invoice-${inv.id.slice(0, 8)}.pdf`);
+  doc.save(`invoice-${inv.id}.pdf`);
 }
 
 export function downloadPurchaseOrderPdf(po: PurchaseOrderPdfData) {
@@ -169,7 +169,7 @@ export function downloadPurchaseOrderPdf(po: PurchaseOrderPdfData) {
   let y = 42;
   doc.setFontSize(10);
   doc.setTextColor(71, 85, 105);
-  doc.text(`PO ID: ${po.id.slice(0, 8)}`, 14, y);
+  doc.text(`PO ID: ${po.id}`, 14, y);
   y += 6;
   if (po.quotationId) {
     doc.text(`Quotation: ${po.quotationId}`, 14, y);
@@ -206,5 +206,5 @@ export function downloadPurchaseOrderPdf(po: PurchaseOrderPdfData) {
     headStyles: { fillColor: [30, 64, 175] },
   });
 
-  doc.save(`purchase-order-${po.id.slice(0, 8)}.pdf`);
+  doc.save(`purchase-order-${po.id}.pdf`);
 }

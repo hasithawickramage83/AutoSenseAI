@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/db.js";
+import { parseIntId } from "../utils/parseId.js";
 
 const VALID_ROLES = ["ADMIN", "WORKSHOP", "SUPPLIER"];
 
@@ -106,8 +107,9 @@ export const login = async (req, res) => {
 // CURRENT USER
 export const me = async (req, res) => {
   try {
+    const userId = parseIntId(req.user.userId) ?? req.user.userId;
     const user = await prisma.user.findUnique({
-      where: { id: req.user.userId }
+      where: { id: userId },
     });
 
     if (!user) {

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useStore, type Role, ApiError } from "../lib/store";
 import { DashboardShell, normalizeHash } from "../components/DashboardShell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -28,7 +28,8 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { Textarea } from "../components/ui/textarea";
-import { Users, Package, Pencil, Trash2, Plus, RefreshCw } from "lucide-react";
+import { Users, Package, Pencil, Trash2, Plus, RefreshCw, Search, LayoutDashboard } from "lucide-react";
+import { InventoryDashboardTab } from "@/components/admin/inventory-dashboard";
 import { toast } from "sonner";
 import {
   fetchUsers,
@@ -58,7 +59,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type AdminSection = "users" | "parts";
+type AdminSection = "users" | "parts" | "inventory";
 type PartTab = "models" | "parts" | "stock";
 
 function hashKey(hash: string) {
@@ -67,6 +68,9 @@ function hashKey(hash: string) {
 
 function parseAdminRoute(hash: string): { section: AdminSection; partTab: PartTab } {
   const key = hashKey(hash);
+  if (key === "inventory") {
+    return { section: "inventory", partTab: "stock" };
+  }
   if (key === "parts" || key.startsWith("parts-")) {
     const partTab: PartTab =
       key === "parts-stock" ? "stock" : key === "parts-list" ? "parts" : "models";
@@ -102,7 +106,13 @@ function AdminPage() {
   return (
     <DashboardShell
       role="admin"
-      title={section === "users" ? "User Management" : "Part Management"}
+      title={
+        section === "users"
+          ? "User Management"
+          : section === "inventory"
+            ? "Inventory Dashboard"
+            : "Part Management"
+      }
       nav={[
         {
           label: "Users",
@@ -111,6 +121,13 @@ function AdminPage() {
           section: "users",
           icon: <Users className="h-4 w-4" />,
           children: [{ label: "User Management", hash: USERS_HASH }],
+        },
+        {
+          label: "Inventory",
+          to: "/admin",
+          hash: "inventory",
+          section: "inventory",
+          icon: <LayoutDashboard className="h-4 w-4" />,
         },
         {
           label: "Part Management",
@@ -128,6 +145,8 @@ function AdminPage() {
     >
       {section === "users" ? (
         <UsersTab />
+      ) : section === "inventory" ? (
+        <InventoryDashboardTab />
       ) : (
         <PartManagementTab
           tab={partTab}
@@ -150,6 +169,18 @@ function UsersTab() {
   const [role, setRole] = useState<Role>("workshop");
   const [editUser, setEditUser] = useState<ApiUser | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+
+  const filteredUsers = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return users.filter((u) => {
+      const matchRole = roleFilter === "all" || u.role.toLowerCase() === roleFilter;
+      const matchSearch =
+        !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+      return matchRole && matchSearch;
+    });
+  }, [users, search, roleFilter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -269,6 +300,28 @@ function UsersTab() {
           </Button>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search name or email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                <SelectItem value="workshop">Workshop</SelectItem>
+                <SelectItem value="supplier">Supplier</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -279,7 +332,7 @@ function UsersTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => (
+              {filteredUsers.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell>{u.name}</TableCell>
                   <TableCell>{u.email}</TableCell>
@@ -301,9 +354,11 @@ function UsersTab() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!loading && users.length === 0 && (
+              {!loading && filteredUsers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-slate-500">No users found</TableCell>
+                  <TableCell colSpan={4} className="text-center text-slate-500">
+                    {users.length === 0 ? "No users found" : "No users match your filters"}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -403,6 +458,13 @@ function VehicleModelsTab() {
   const [name, setName] = useState("");
   const [editModel, setEditModel] = useState<ApiVehicleModel | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filteredModels = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return models;
+    return models.filter((m) => m.name.toLowerCase().includes(q));
+  }, [models, search]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -485,6 +547,15 @@ function VehicleModelsTab() {
           </Button>
         </CardHeader>
         <CardContent>
+          <div className="relative mb-4 max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Filter models…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -494,7 +565,7 @@ function VehicleModelsTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {models.map((m) => (
+              {filteredModels.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell>{m.name}</TableCell>
                   <TableCell>{m._count?.parts ?? 0}</TableCell>
@@ -508,9 +579,11 @@ function VehicleModelsTab() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!loading && models.length === 0 && (
+              {!loading && filteredModels.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-slate-500">No vehicle models yet</TableCell>
+                  <TableCell colSpan={3} className="text-center text-slate-500">
+                    {models.length === 0 ? "No vehicle models yet" : "No models match your filter"}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -561,6 +634,22 @@ function PartsTab() {
   const [vehicleModelId, setVehicleModelId] = useState("");
   const [editPart, setEditPart] = useState<ApiPart | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [modelFilter, setModelFilter] = useState("all");
+
+  const filteredParts = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return parts.filter((p) => {
+      const matchModel =
+        modelFilter === "all" || p.vehicleModelId === modelFilter;
+      const matchSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.vehicleModel.name.toLowerCase().includes(q) ||
+        (p.description?.toLowerCase().includes(q) ?? false);
+      return matchModel && matchSearch;
+    });
+  }, [parts, search, modelFilter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -675,6 +764,30 @@ function PartsTab() {
           </Button>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search parts…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={modelFilter} onValueChange={setModelFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Model" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All models</SelectItem>
+                {models.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -686,7 +799,7 @@ function PartsTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {parts.map((p) => (
+              {filteredParts.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell>{p.name}</TableCell>
                   <TableCell>{p.vehicleModel.name}</TableCell>
@@ -708,9 +821,11 @@ function PartsTab() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!loading && parts.length === 0 && (
+              {!loading && filteredParts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-slate-500">No parts yet</TableCell>
+                  <TableCell colSpan={5} className="text-center text-slate-500">
+                    {parts.length === 0 ? "No parts yet" : "No parts match your filters"}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -785,6 +900,22 @@ function StockTab() {
   const [price, setPrice] = useState(0);
   const [editStock, setEditStock] = useState<ApiStock | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [stockFilter, setStockFilter] = useState("all");
+
+  const filteredStock = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return stock.filter((s) => {
+      const avail =
+        s.quantity <= 0 ? "out" : s.quantity <= 2 ? "low" : "ok";
+      const matchFilter = stockFilter === "all" || stockFilter === avail;
+      const matchSearch =
+        !q ||
+        (s.part?.name ?? "").toLowerCase().includes(q) ||
+        (s.part?.vehicleModel?.name ?? "").toLowerCase().includes(q);
+      return matchFilter && matchSearch;
+    });
+  }, [stock, search, stockFilter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -926,6 +1057,28 @@ function StockTab() {
           </Button>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search stock…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={stockFilter} onValueChange={setStockFilter}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Availability" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="ok">In stock</SelectItem>
+                <SelectItem value="low">Low stock</SelectItem>
+                <SelectItem value="out">Out of stock</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -937,7 +1090,7 @@ function StockTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {stock.map((s) => (
+              {filteredStock.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell>{s.part?.name ?? "—"}</TableCell>
                   <TableCell>{s.part?.vehicleModel?.name ?? "—"}</TableCell>
@@ -955,9 +1108,11 @@ function StockTab() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!loading && stock.length === 0 && (
+              {!loading && filteredStock.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-slate-500">No stock records yet</TableCell>
+                  <TableCell colSpan={5} className="text-center text-slate-500">
+                    {stock.length === 0 ? "No stock records yet" : "No stock matches your filters"}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>

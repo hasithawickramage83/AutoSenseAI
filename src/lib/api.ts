@@ -27,11 +27,38 @@ export function setToken(token: string | null): void {
 export type ApiUserRole = "ADMIN" | "WORKSHOP" | "SUPPLIER";
 
 export interface ApiUser {
-  id: string;
+  id: string | number;
   name: string;
   email: string;
   role: ApiUserRole;
   createdAt?: string;
+}
+
+function normalizeUser(u: ApiUser): ApiUser {
+  return { ...u, id: String(u.id) };
+}
+
+function normalizeVehicleModel(m: ApiVehicleModel): ApiVehicleModel {
+  return { ...m, id: String(m.id) };
+}
+
+function normalizeStock(s: ApiStock): ApiStock {
+  return {
+    ...s,
+    id: String(s.id),
+    partId: String(s.partId),
+    part: s.part ? normalizePart(s.part) : s.part,
+  };
+}
+
+function normalizePart(p: ApiPart): ApiPart {
+  return {
+    ...p,
+    id: String(p.id),
+    vehicleModelId: String(p.vehicleModelId),
+    vehicleModel: p.vehicleModel ? normalizeVehicleModel(p.vehicleModel) : p.vehicleModel,
+    stocks: (p.stocks ?? []).map(normalizeStock),
+  };
 }
 
 export function apiRoleToApp(role: ApiUserRole): Role {
@@ -54,7 +81,7 @@ export function appRoleToApi(role: Role): ApiUserRole {
 
 export function apiUserToApp(user: ApiUser) {
   return {
-    id: user.id,
+    id: String(user.id),
     email: user.email,
     name: user.name,
     role: apiRoleToApp(user.role),
@@ -113,7 +140,8 @@ export async function fetchCurrentUser() {
 // ─── Admin: Users ────────────────────────────────────────────────────────────
 
 export async function fetchUsers() {
-  return request<ApiUser[]>("/api/admin/users");
+  const rows = await request<ApiUser[]>("/api/admin/users");
+  return rows.map(normalizeUser);
 }
 
 export async function createAdminUser(payload: {
@@ -122,7 +150,7 @@ export async function createAdminUser(payload: {
   password: string;
   role: Role;
 }) {
-  return request<{ message: string; user: ApiUser }>("/api/admin/users", {
+  const res = await request<{ message: string; user: ApiUser }>("/api/admin/users", {
     method: "POST",
     body: JSON.stringify({
       name: payload.name,
@@ -131,19 +159,21 @@ export async function createAdminUser(payload: {
       role: appRoleToApi(payload.role),
     }),
   });
+  return { ...res, user: normalizeUser(res.user) };
 }
 
 export async function updateAdminUser(
   id: string,
   payload: { name?: string; email?: string; password?: string; role?: Role },
 ) {
-  return request<{ message: string; user: ApiUser }>(`/api/admin/users/${id}`, {
+  const res = await request<{ message: string; user: ApiUser }>(`/api/admin/users/${id}`, {
     method: "PUT",
     body: JSON.stringify({
       ...payload,
       role: payload.role ? appRoleToApi(payload.role) : undefined,
     }),
   });
+  return { ...res, user: normalizeUser(res.user) };
 }
 
 export async function deleteAdminUser(id: string) {
@@ -153,27 +183,30 @@ export async function deleteAdminUser(id: string) {
 // ─── Admin: Vehicle Models ───────────────────────────────────────────────────
 
 export interface ApiVehicleModel {
-  id: string;
+  id: string | number;
   name: string;
   _count?: { parts: number };
 }
 
 export async function fetchVehicleModels() {
-  return request<ApiVehicleModel[]>("/api/admin/vehicle-models");
+  const rows = await request<ApiVehicleModel[]>("/api/admin/vehicle-models");
+  return rows.map(normalizeVehicleModel);
 }
 
 export async function createVehicleModel(name: string) {
-  return request<ApiVehicleModel>("/api/admin/vehicle-models", {
+  const row = await request<ApiVehicleModel>("/api/admin/vehicle-models", {
     method: "POST",
     body: JSON.stringify({ name }),
   });
+  return normalizeVehicleModel(row);
 }
 
 export async function updateVehicleModel(id: string, name: string) {
-  return request<ApiVehicleModel>(`/api/admin/vehicle-models/${id}`, {
+  const row = await request<ApiVehicleModel>(`/api/admin/vehicle-models/${id}`, {
     method: "PUT",
     body: JSON.stringify({ name }),
   });
+  return normalizeVehicleModel(row);
 }
 
 export async function deleteVehicleModel(id: string) {
@@ -183,17 +216,18 @@ export async function deleteVehicleModel(id: string) {
 // ─── Admin: Parts ────────────────────────────────────────────────────────────
 
 export interface ApiPart {
-  id: string;
+  id: string | number;
   name: string;
   description: string | null;
   activeStatus: number;
-  vehicleModelId: string;
+  vehicleModelId: string | number;
   vehicleModel: ApiVehicleModel;
   stocks: ApiStock[];
 }
 
 export async function fetchParts() {
-  return request<ApiPart[]>("/api/admin/parts");
+  const rows = await request<ApiPart[]>("/api/admin/parts");
+  return rows.map(normalizePart);
 }
 
 export async function createPart(payload: {
@@ -201,65 +235,102 @@ export async function createPart(payload: {
   description?: string;
   vehicleModelId: string;
 }) {
-  return request<ApiPart>("/api/admin/part", {
+  const row = await request<ApiPart>("/api/admin/part", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+  return normalizePart(row);
 }
 
 export async function updatePart(
   id: string,
   payload: { name?: string; description?: string; vehicleModelId?: string },
 ) {
-  return request<ApiPart>(`/api/admin/parts/${id}`, {
+  const row = await request<ApiPart>(`/api/admin/parts/${id}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
+  return normalizePart(row);
 }
 
 export async function deletePart(id: string) {
-  return request<{ message: string; part: ApiPart }>(`/api/admin/parts/${id}`, {
+  const res = await request<{ message: string; part: ApiPart }>(`/api/admin/parts/${id}`, {
     method: "DELETE",
   });
+  return { ...res, part: normalizePart(res.part) };
 }
 
 // ─── Admin: Stock ────────────────────────────────────────────────────────────
 
 export interface ApiStock {
-  id: string;
+  id: string | number;
   quantity: number;
   price: number;
-  partId: string;
+  partId: string | number;
   part?: ApiPart & { vehicleModel?: ApiVehicleModel };
 }
 
 export async function fetchStock() {
-  return request<ApiStock[]>("/api/admin/stock");
+  const rows = await request<ApiStock[]>("/api/admin/stock");
+  return rows.map(normalizeStock);
 }
 
 export async function createStock(payload: { partId: string; quantity: number; price: number }) {
-  return request<ApiStock>("/api/admin/stock", {
+  const row = await request<ApiStock>("/api/admin/stock", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+  return normalizeStock(row);
 }
 
 export async function updateStock(id: string, payload: { quantity?: number; price?: number }) {
-  return request<ApiStock>(`/api/admin/stock/${id}`, {
+  const row = await request<ApiStock>(`/api/admin/stock/${id}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
+  return normalizeStock(row);
 }
 
 export async function upsertStockByPart(payload: { partId: string; quantity: number; price: number }) {
-  return request<ApiStock>("/api/admin/stock/by-part", {
+  const row = await request<ApiStock>("/api/admin/stock/by-part", {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+  return normalizeStock(row);
 }
 
 export async function deleteStock(id: string) {
   return request<{ message: string }>(`/api/admin/stock/${id}`, { method: "DELETE" });
+}
+
+export interface InventoryDashboard {
+  totalSkus: number;
+  inStock: number;
+  outOfStock: number;
+  lowStock: number;
+  totalValue: number;
+  items: {
+    id: string;
+    partId: string;
+    partName: string;
+    vehicleModel: string;
+    quantity: number;
+    price: number;
+    value: number;
+    availability: "ok" | "low" | "out";
+  }[];
+}
+
+export async function fetchInventoryDashboard() {
+  const data = await request<InventoryDashboard>("/api/admin/inventory/dashboard");
+  return {
+    ...data,
+    items: data.items.map((i) => ({
+      ...i,
+      id: String(i.id),
+      partId: String(i.partId),
+    })),
+  };
 }
 
 // ─── Workshop: Damage Processing ─────────────────────────────────────────────
@@ -300,6 +371,13 @@ export interface ProcessDamageResponse {
     labourCost: number;
     createdAt: string;
   };
+  processing?: {
+    allInStock: boolean;
+    autoSent: boolean;
+    invoiceId?: string;
+    quotationStatus?: string;
+    purchaseOrderCount: number;
+  } | null;
 }
 
 export async function processDamage(payload: {
@@ -341,9 +419,11 @@ export async function fetchWorkshopInvoices() {
       id: string;
       quotationId: string;
       workshopName: string;
+      vehicle?: string;
       parts: { name: string; qty: number; price: number }[];
       labourCost: number;
       total: number;
+      status?: string;
       createdAt: number;
     }[]
   >("/api/workshop/invoices");
@@ -397,23 +477,29 @@ export async function fetchSupplierStock() {
   return request<SupplierStockItem[]>("/api/supplier/stock");
 }
 
+export type SupplierQuotation = {
+  id: string;
+  workshopId: string;
+  workshopName: string;
+  vehicle: string;
+  description: string;
+  damages: string[];
+  severity: string;
+  recommendations: string[];
+  parts: { name: string; qty: number; price: number }[];
+  labourCost: number;
+  status: string;
+  createdAt: number;
+  invoiceId?: string;
+  poId?: string;
+};
+
 export async function fetchSupplierQuotations() {
-  return request<
-    {
-      id: string;
-      workshopId: string;
-      workshopName: string;
-      vehicle: string;
-      description: string;
-      damages: string[];
-      severity: string;
-      recommendations: string[];
-      parts: { name: string; qty: number; price: number }[];
-      labourCost: number;
-      status: string;
-      createdAt: number;
-    }[]
-  >("/api/supplier/quotations");
+  return request<SupplierQuotation[]>("/api/supplier/quotations");
+}
+
+export async function fetchSupplierAllQuotations() {
+  return request<SupplierQuotation[]>("/api/supplier/quotations/all");
 }
 
 export async function processSupplierQuotation(id: string) {

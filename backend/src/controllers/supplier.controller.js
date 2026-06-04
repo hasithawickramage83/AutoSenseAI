@@ -1,9 +1,12 @@
 import { prisma } from "../config/db.js";
-import { hybridEngine } from "../services/hybrid.engine.js";
-import {
-  addActivityLog,
-  buildQuotationParts,
-} from "../utils/activityLog.js";
+import { processQuotationById } from "../services/quotation.processor.js";
+import { sendInvoiceEmail } from "../services/email.service.js";
+import { addActivityLog } from "../utils/activityLog.js";
+import { parseIntId } from "../utils/parseId.js";
+
+function supplierIdFromReq(req) {
+  return parseIntId(req.user.userId) ?? Number(req.user.userId);
+}
 
 function mapQuotation(q) {
   return {
@@ -11,14 +14,16 @@ function mapQuotation(q) {
     workshopId: q.workshopId,
     workshopName: q.workshop?.name ?? "",
     vehicle: q.vehicle,
-    description: q.description,
-    damages: q.damages,
+    description: q.description ?? "",
+    damages: q.damages ?? [],
     severity: q.severity,
-    recommendations: q.recommendations,
-    parts: q.parts,
+    recommendations: q.recommendations ?? [],
+    parts: q.parts ?? [],
     labourCost: q.labourCost,
     status: q.status,
     createdAt: q.createdAt.getTime(),
+    invoiceId: q.invoice?.id,
+    poId: q.purchaseOrders?.[0]?.id,
   };
 }
 
@@ -98,7 +103,19 @@ export const getQuotations = async (req, res) => {
   try {
     const rows = await prisma.quotation.findMany({
       where: { status: { in: ["Pending", "Processing"] } },
-      include: { workshop: true },
+      include: { workshop: true, invoice: true, purchaseOrders: true },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(rows.map(mapQuotation));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getAllQuotations = async (req, res) => {
+  try {
+    const rows = await prisma.quotation.findMany({
+      include: { workshop: true, invoice: true, purchaseOrders: true },
       orderBy: { createdAt: "desc" },
     });
     res.json(rows.map(mapQuotation));
@@ -110,103 +127,37 @@ export const getQuotations = async (req, res) => {
 export const processQuotation = async (req, res) => {
   try {
     const { id } = req.params;
-    const supplierId = req.user.userId;
+    const supplierId = supplierIdFromReq(req);
+
+    const saved = await processQuotationById(id, { actorUserId: supplierId });
 
     const quotation = await prisma.quotation.findUnique({
       where: { id },
-      include: { workshop: true },
+      include: { workshop: true, invoice: true, purchaseOrders: true },
     });
-
-    if (!quotation) {
-      return res.status(404).json({ error: "Quotation not found" });
-    }
-
-    if (!["Pending", "Processing"].includes(quotation.status)) {
-      return res.status(400).json({ error: "Quotation already processed" });
-    }
-
-    const aiResult = quotation.aiResult;
-    const result = await hybridEngine(aiResult);
-    const parts = buildQuotationParts(result.invoice);
-    const labourCost = quotation.labourCost;
-    const partsTotal = parts.reduce((sum, p) => sum + p.price * p.qty, 0);
-    const invoiceTotal = partsTotal + labourCost;
-    const hasPO = result.purchaseOrders.length > 0;
-    const status = hasPO ? "PO Raised" : "Invoiced";
-    const urgency =
-      quotation.severity === "High"
-        ? "Critical"
-        : quotation.severity === "Medium"
-          ? "Urgent"
-          : "Standard";
-
-    const saved = await prisma.$transaction(async (tx) => {
-      const updated = await tx.quotation.update({
-        where: { id },
-        data: { parts, status: "Processing" },
-      });
-
-      let invoice = null;
-      if (result.invoice.length > 0) {
-        invoice = await tx.invoice.create({
-          data: {
-            quotationId: id,
-            workshopId: quotation.workshopId,
-            lineItems: result.invoice.map((l) => ({
-              partName: l.partName,
-              quantity: l.quantity ?? 1,
-              price: l.price,
-            })),
-            labourCost,
-            total: invoiceTotal,
-            status: "Draft",
-          },
-        });
-      }
-
-      const purchaseOrders = [];
-      for (const po of result.purchaseOrders) {
-        const stockItem = await tx.stock.findFirst({
-          where: {
-            part: {
-              name: { contains: po.partName.split(" ").slice(1).join(" "), mode: "insensitive" },
-            },
-          },
-        });
-        const row = await tx.purchaseOrder.create({
-          data: {
-            quotationId: id,
-            partName: po.partName,
-            quantity: po.quantity,
-            price: stockItem?.price ?? 150,
-            status: "Draft",
-            vendorEmail: "vendor@nzparts-supply.co.nz",
-            urgency,
-          },
-        });
-        purchaseOrders.push(row);
-      }
-
-      await tx.quotation.update({ where: { id }, data: { status } });
-
-      return { quotation: updated, invoice, purchaseOrders };
-    });
-
-    await addActivityLog(
-      supplierId,
-      `Processed quotation ${id.slice(0, 8)} for ${quotation.workshop.name}`,
-      "ai",
-    );
 
     res.json({
-      quotation: mapQuotation({ ...saved.quotation, workshop: quotation.workshop, status }),
-      invoice: saved.invoice ? mapInvoice({ ...saved.invoice, workshop: quotation.workshop, quotation }) : null,
+      quotation: mapQuotation(quotation),
+      invoice: saved.invoice
+        ? mapInvoice({ ...saved.invoice, workshop: quotation.workshop, quotation })
+        : null,
       purchaseOrders: groupPurchaseOrders(
-        saved.purchaseOrders.map((po) => ({ ...po, quotation: { ...quotation, workshop: quotation.workshop } })),
+        saved.purchaseOrders.map((po) => ({
+          ...po,
+          quotation: { ...quotation, workshop: quotation.workshop },
+        })),
       ),
+      allInStock: saved.allInStock,
+      autoSent: saved.autoSent,
     });
   } catch (error) {
     console.error("processQuotation error:", error);
+    if (error.message.includes("not found")) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error.message.includes("already")) {
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 };
@@ -266,11 +217,11 @@ export const updateInvoice = async (req, res) => {
 export const sendInvoice = async (req, res) => {
   try {
     const { id } = req.params;
-    const supplierId = req.user.userId;
+    const supplierId = supplierIdFromReq(req);
 
     const existing = await prisma.invoice.findUnique({
       where: { id },
-      include: { workshop: true },
+      include: { workshop: true, quotation: true },
     });
     if (!existing) {
       return res.status(404).json({ error: "Invoice not found" });
@@ -288,12 +239,29 @@ export const sendInvoice = async (req, res) => {
       },
     });
 
+    try {
+      await sendInvoiceEmail({
+        to: existing.workshop.email,
+        workshopName: existing.workshop.name,
+        invoice: updated,
+      });
+    } catch (err) {
+      console.error("sendInvoiceEmail error:", err);
+    }
+
+    if (existing.quotation && existing.quotation.status === "PO Raised") {
+      await prisma.quotation.update({
+        where: { id: existing.quotationId },
+        data: { status: "Invoiced" },
+      });
+    }
+
     await addActivityLog(
       existing.workshopId,
-      `Invoice ${id.slice(0, 8)} sent by supplier — NZD $${existing.total.toFixed(2)}`,
+      `Invoice ${id} sent by supplier — NZD $${existing.total.toFixed(2)}`,
       "system",
     );
-    await addActivityLog(supplierId, `Invoice ${id.slice(0, 8)} sent to ${existing.workshop.name}`, "system");
+    await addActivityLog(supplierId, `Invoice ${id} sent to ${existing.workshop.name}`, "system");
 
     res.json(mapInvoice(updated));
   } catch (error) {
@@ -356,7 +324,7 @@ export const updatePurchaseOrderGroup = async (req, res) => {
 export const sendPurchaseOrderGroup = async (req, res) => {
   try {
     const { quotationId } = req.params;
-    const supplierId = req.user.userId;
+    const supplierId = supplierIdFromReq(req);
 
     const rows = await prisma.purchaseOrder.findMany({
       where: { quotationId },
@@ -378,13 +346,13 @@ export const sendPurchaseOrderGroup = async (req, res) => {
     const workshop = rows[0].quotation?.workshop;
     await addActivityLog(
       supplierId,
-      `Purchase order for quotation ${quotationId.slice(0, 8)} sent to ${rows[0].vendorEmail}`,
+      `Purchase order for quotation ${quotationId} sent to ${rows[0].vendorEmail}`,
       "system",
     );
     if (workshop) {
       await addActivityLog(
         workshop.id,
-        `Purchase order received for quotation ${quotationId.slice(0, 8)}`,
+        `Purchase order received for quotation ${quotationId}`,
         "system",
       );
     }
