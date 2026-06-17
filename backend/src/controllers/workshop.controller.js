@@ -181,3 +181,15 @@ export const deleteQuotation = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const listVehicleModels = async (_req, res) => {
+  try {
+    const models = await prisma.vehicleModel.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+    res.json(models.map((m) => ({ id: String(m.id), name: m.name })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

@@ -14,6 +14,11 @@ enum UserRole {
   SUPPLIER
 }
 
+enum VendorStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id           Int           @id @default(autoincrement())
   name         String
@@ -52,8 +57,8 @@ model Stock {
 
 model Quotation {
   id              String          @id
-  workshopId      Int
-  workshop        User            @relation(fields: [workshopId], references: [id])
+  workshopId      Int?
+  workshop        User?           @relation(fields: [workshopId], references: [id])
   vehicle         String
   description     String
   inputText       String
@@ -64,11 +69,13 @@ model Quotation {
   severity        String          @default("Medium")
   labourCost      Float           @default(0)
   status          String          @default("Pending")
+  source          String          @default("WORKSHOP")
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   invoice         Invoice?
-  purchaseOrders  PurchaseOrder[]
-  damageReport    DamageReport?
+  purchaseOrders         PurchaseOrder[]
+  damageReport           DamageReport?
+  vendorQuotationRequests VendorQuotationRequest[]
 }
 
 model Invoice {
@@ -115,4 +122,66 @@ model ActivityLog {
   message   String
   type      String
   createdAt DateTime @default(now())
+}
+
+model Vendor {
+  id                  Int                      @id @default(autoincrement())
+  companyName         String
+  contactPerson       String
+  email               String                   @unique
+  address             String?
+  contactNumber       String?
+  status              VendorStatus             @default(ACTIVE)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  quotationRequests   VendorQuotationRequest[]
+}
+
+model VendorQuotationRequest {
+  id            Int                              @id @default(autoincrement())
+  quotationId   String
+  quotation     Quotation                        @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  vendorId      Int
+  vendor        Vendor                           @relation(fields: [vendorId], references: [id])
+  requestedById Int
+  token         String                           @unique
+  status        String                           @default("Pending")
+  expiresAt     DateTime
+  sentAt        DateTime?
+  openedAt      DateTime?
+  respondedAt   DateTime?
+  createdAt     DateTime                         @default(now())
+  updatedAt     DateTime                         @updatedAt
+  parts         VendorQuotationRequestPart[]
+  response      VendorQuotationResponse?
+  activities    VendorQuotationRequestActivity[]
+
+  @@unique([quotationId, vendorId])
+}
+
+model VendorQuotationRequestPart {
+  id        Int                    @id @default(autoincrement())
+  requestId Int
+  request   VendorQuotationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  partName  String
+  quantity  Int                    @default(1)
+}
+
+model VendorQuotationResponse {
+  id                    Int                    @id @default(autoincrement())
+  requestId             Int                    @unique
+  request               VendorQuotationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  estimatedDeliveryTime String?
+  remarks               String?
+  lineItems             Json
+  submittedAt           DateTime               @default(now())
+}
+
+model VendorQuotationRequestActivity {
+  id        Int                    @id @default(autoincrement())
+  requestId Int
+  request   VendorQuotationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  message   String
+  type      String
+  createdAt DateTime               @default(now())
 }

@@ -20,6 +20,13 @@ import {
   getInventory,
   getInventoryDashboard,
 } from "../controllers/admin.controller.js";
+import {
+  listVendors,
+  getVendor,
+  createVendor,
+  updateVendor,
+  deleteVendor,
+} from "../controllers/vendor.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { authorizeRoles } from "../middleware/role.middleware.js";
 
@@ -52,5 +59,12 @@ router.post("/stock", ...adminOnly, createStock);
 router.put("/stock/:id", ...adminOnly, updateStock);
 router.patch("/stock/by-part", ...adminOnly, upsertStockByPart);
 router.delete("/stock/:id", ...adminOnly, deleteStock);
+
+// Vendors
+router.get("/vendors", ...adminOnly, listVendors);
+router.get("/vendors/:id", ...adminOnly, getVendor);
+router.post("/vendors", ...adminOnly, createVendor);
+router.put("/vendors/:id", ...adminOnly, updateVendor);
+router.delete("/vendors/:id", ...adminOnly, deleteVendor);
 
 export default router;

@@ -18,8 +18,12 @@ import {
   Boxes,
   FileText,
   ShoppingCart,
-
+  Send,
+  GitCompare,
 } from "lucide-react";
+import { SupplierVendorRequestSection } from "@/components/supplier/vendor-request-section";
+import { SupplierVendorComparisonSection } from "@/components/supplier/vendor-comparison-section";
+import { SupplierCustomQuotationSection } from "@/components/supplier/custom-quotation-section";
 
 export const Route = createFileRoute("/supplier")({
   component: SupplierPage,
@@ -33,7 +37,10 @@ type SupplierSection =
   | "invoices"
   | "invoices-all"
   | "pos"
-  | "pos-all";
+  | "pos-all"
+  | "vendor-request"
+  | "vendor-custom"
+  | "vendor-comparison";
 
 function parseSection(hash: string): SupplierSection {
   const key = normalizeHash(hash).replace(/^#/, "");
@@ -44,6 +51,9 @@ function parseSection(hash: string): SupplierSection {
   if (key === "invoices-all") return "invoices-all";
   if (key === "pos") return "pos";
   if (key === "pos-all") return "pos-all";
+  if (key === "vendor-request") return "vendor-request";
+  if (key === "vendor-custom") return "vendor-custom";
+  if (key === "vendor-comparison") return "vendor-comparison";
   return "dashboard";
 }
 
@@ -56,6 +66,9 @@ const SECTION_HASH: Record<SupplierSection, string | undefined> = {
   "invoices-all": "invoices-all",
   pos: "pos",
   "pos-all": "pos-all",
+  "vendor-request": "vendor-request",
+  "vendor-custom": "vendor-custom",
+  "vendor-comparison": "vendor-comparison",
 };
 
 const SECTION_TITLES: Record<SupplierSection, string> = {
@@ -67,6 +80,9 @@ const SECTION_TITLES: Record<SupplierSection, string> = {
   "invoices-all": "All Invoices",
   pos: "Purchase Orders",
   "pos-all": "All Purchase Orders",
+  "vendor-request": "Send Vendor Quotation",
+  "vendor-custom": "Custom Quotation",
+  "vendor-comparison": "Vendor Comparison",
 };
 
 function SupplierPage() {
@@ -119,6 +135,18 @@ function SupplierPage() {
           children: [{ label: "Stock Alerts", hash: "stock" }],
         },
         {
+          label: "Vendor Quotes",
+          to: "/supplier",
+          hash: "vendor-request",
+          section: "vendor-quotes",
+          icon: <Send className="h-4 w-4" />,
+          children: [
+            { label: "Send Request", hash: "vendor-request" },
+            { label: "Custom Quotation", hash: "vendor-custom" },
+            { label: "Compare & Summary", hash: "vendor-comparison" },
+          ],
+        },
+        {
           label: "Billing",
           to: "/supplier",
           hash: "invoices",
@@ -148,6 +176,9 @@ function SupplierPage() {
       {section === "invoices-all" && <SupplierAllInvoicesSection />}
       {section === "pos" && <SupplierPurchaseOrdersSection />}
       {section === "pos-all" && <SupplierAllPurchaseOrdersSection />}
+      {section === "vendor-request" && <SupplierVendorRequestSection />}
+      {section === "vendor-custom" && <SupplierCustomQuotationSection />}
+      {section === "vendor-comparison" && <SupplierVendorComparisonSection />}
     </DashboardShell>
   );
 }

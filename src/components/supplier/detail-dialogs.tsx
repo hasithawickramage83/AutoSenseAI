@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 
@@ -34,6 +35,9 @@ export function QuotationDetailDialog({
           <DetailRow label="Workshop" value={quotation.workshopName} />
           <DetailRow label="Vehicle" value={quotation.vehicle} />
           <DetailRow label="Status" value={<Badge variant="outline">{quotation.status}</Badge>} />
+          {quotation.source === "SUPPLIER" && (
+            <DetailRow label="Source" value={<Badge variant="secondary">Supplier custom</Badge>} />
+          )}
           <DetailRow label="Severity" value={quotation.severity} />
           <DetailRow label="Created" value={format(quotation.createdAt, "dd MMM yyyy, HH:mm")} />
           <DetailRow label="Labour (NZD)" value={`$${quotation.labourCost.toLocaleString()}`} />
@@ -100,13 +104,24 @@ export function InvoiceDetailDialog({
   invoice,
   open,
   onOpenChange,
+  onSend,
+  sending,
 }: {
   invoice: Invoice | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSend?: () => void;
+  sending?: boolean;
 }) {
   if (!invoice) return null;
-  const partsTotal = invoice.parts.reduce((s, p) => s + p.price * p.qty, 0);
+  const statusLabel =
+    invoice.status === "Sent"
+      ? "Sent"
+      : invoice.awaitingStock
+        ? "Awaiting stock"
+        : invoice.stockReady
+          ? "Ready to send"
+          : invoice.status ?? "Draft";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -122,13 +137,35 @@ export function InvoiceDetailDialog({
           <DetailRow
             label="Status"
             value={
-              <Badge variant="outline" className={invoice.status === "Sent" ? "border-emerald-300 text-emerald-800" : ""}>
-                {invoice.status ?? "Draft"}
+              <Badge
+                variant="outline"
+                className={
+                  invoice.status === "Sent"
+                    ? "border-emerald-300 text-emerald-800"
+                    : invoice.awaitingStock
+                      ? "border-amber-300 text-amber-800"
+                      : invoice.stockReady
+                        ? "border-blue-300 text-blue-800"
+                        : ""
+                }
+              >
+                {statusLabel}
               </Badge>
             }
           />
+          {invoice.awaitingStock && invoice.stockItems && invoice.stockItems.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              <p className="font-medium mb-1">Stock required before sending</p>
+              <ul className="space-y-0.5">
+                {invoice.stockItems.map((s) => (
+                  <li key={s.partName}>
+                    {s.partName}: need {s.requiredQty}, available {s.availableQty}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <DetailRow label="Created" value={format(invoice.createdAt, "dd MMM yyyy, HH:mm")} />
-          <DetailRow label="Labour (NZD)" value={`$${invoice.labourCost.toLocaleString()}`} />
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Line items</p>
             <Table>
@@ -150,18 +187,6 @@ export function InvoiceDetailDialog({
                   </TableRow>
                 ))}
                 <TableRow>
-                  <TableCell colSpan={3} className="font-medium">
-                    Parts subtotal
-                  </TableCell>
-                  <TableCell>${partsTotal.toLocaleString()}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell colSpan={3} className="font-medium">
-                    Labour
-                  </TableCell>
-                  <TableCell>${invoice.labourCost.toLocaleString()}</TableCell>
-                </TableRow>
-                <TableRow>
                   <TableCell colSpan={3} className="font-bold">
                     Total
                   </TableCell>
@@ -170,6 +195,13 @@ export function InvoiceDetailDialog({
               </TableBody>
             </Table>
           </div>
+          {onSend && (
+            <div className="flex justify-end pt-2">
+              <Button size="sm" onClick={onSend} disabled={sending}>
+                {sending ? "Sending…" : "Send to workshop"}
+              </Button>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

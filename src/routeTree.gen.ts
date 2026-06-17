@@ -13,6 +13,7 @@ import { Route as WorkshopRouteImport } from './routes/workshop'
 import { Route as SupplierRouteImport } from './routes/supplier'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as VendorQuotationResponseTokenRouteImport } from './routes/vendor-quotation-response.$token'
 
 const WorkshopRoute = WorkshopRouteImport.update({
   id: '/workshop',
@@ -34,18 +35,26 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VendorQuotationResponseTokenRoute =
+  VendorQuotationResponseTokenRouteImport.update({
+    id: '/vendor-quotation-response/$token',
+    path: '/vendor-quotation-response/$token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/supplier': typeof SupplierRoute
   '/workshop': typeof WorkshopRoute
+  '/vendor-quotation-response/$token': typeof VendorQuotationResponseTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/supplier': typeof SupplierRoute
   '/workshop': typeof WorkshopRoute
+  '/vendor-quotation-response/$token': typeof VendorQuotationResponseTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +62,30 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/supplier': typeof SupplierRoute
   '/workshop': typeof WorkshopRoute
+  '/vendor-quotation-response/$token': typeof VendorQuotationResponseTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/supplier' | '/workshop'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/supplier'
+    | '/workshop'
+    | '/vendor-quotation-response/$token'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/supplier' | '/workshop'
-  id: '__root__' | '/' | '/admin' | '/supplier' | '/workshop'
+  to:
+    | '/'
+    | '/admin'
+    | '/supplier'
+    | '/workshop'
+    | '/vendor-quotation-response/$token'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/supplier'
+    | '/workshop'
+    | '/vendor-quotation-response/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +93,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   SupplierRoute: typeof SupplierRoute
   WorkshopRoute: typeof WorkshopRoute
+  VendorQuotationResponseTokenRoute: typeof VendorQuotationResponseTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +126,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vendor-quotation-response/$token': {
+      id: '/vendor-quotation-response/$token'
+      path: '/vendor-quotation-response/$token'
+      fullPath: '/vendor-quotation-response/$token'
+      preLoaderRoute: typeof VendorQuotationResponseTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +141,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   SupplierRoute: SupplierRoute,
   WorkshopRoute: WorkshopRoute,
+  VendorQuotationResponseTokenRoute: VendorQuotationResponseTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

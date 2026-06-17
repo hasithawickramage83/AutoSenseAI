@@ -28,8 +28,9 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { Textarea } from "../components/ui/textarea";
-import { Users, Package, Pencil, Trash2, Plus, RefreshCw, Search, LayoutDashboard } from "lucide-react";
+import { Users, Package, Pencil, Trash2, Plus, RefreshCw, Search, LayoutDashboard, Building2 } from "lucide-react";
 import { InventoryDashboardTab } from "@/components/admin/inventory-dashboard";
+import { VendorsTab } from "@/components/admin/vendors-section";
 import { toast } from "sonner";
 import {
   fetchUsers,
@@ -59,7 +60,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type AdminSection = "users" | "parts" | "inventory";
+type AdminSection = "users" | "parts" | "inventory" | "vendors";
 type PartTab = "models" | "parts" | "stock";
 
 function hashKey(hash: string) {
@@ -70,6 +71,9 @@ function parseAdminRoute(hash: string): { section: AdminSection; partTab: PartTa
   const key = hashKey(hash);
   if (key === "inventory") {
     return { section: "inventory", partTab: "stock" };
+  }
+  if (key === "vendors") {
+    return { section: "vendors", partTab: "models" };
   }
   if (key === "parts" || key.startsWith("parts-")) {
     const partTab: PartTab =
@@ -111,7 +115,9 @@ function AdminPage() {
           ? "User Management"
           : section === "inventory"
             ? "Inventory Dashboard"
-            : "Part Management"
+            : section === "vendors"
+              ? "Vendor Management"
+              : "Part Management"
       }
       nav={[
         {
@@ -128,6 +134,13 @@ function AdminPage() {
           hash: "inventory",
           section: "inventory",
           icon: <LayoutDashboard className="h-4 w-4" />,
+        },
+        {
+          label: "Vendors",
+          to: "/admin",
+          hash: "vendors",
+          section: "vendors",
+          icon: <Building2 className="h-4 w-4" />,
         },
         {
           label: "Part Management",
@@ -147,6 +160,8 @@ function AdminPage() {
         <UsersTab />
       ) : section === "inventory" ? (
         <InventoryDashboardTab />
+      ) : section === "vendors" ? (
+        <VendorsTab />
       ) : (
         <PartManagementTab
           tab={partTab}

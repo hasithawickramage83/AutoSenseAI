@@ -62,6 +62,11 @@ function isNavSectionActive(item: NavItem, hash: string, pathname: string) {
     return currentKey === itemKey;
   }
   if (item.section === "inventory") return hashKey(hash) === "inventory";
+  if (item.section === "vendors") return hashKey(hash) === "vendors";
+  if (item.section === "vendor-quotes") {
+    const k = hashKey(hash);
+    return k === "vendor-request" || k === "vendor-custom" || k === "vendor-comparison";
+  }
   if (item.section === "quotations") {
     const k = hashKey(hash);
     return k === "requests" || k === "quotations-all";

@@ -1,14 +1,29 @@
 import axios from "axios";
 
-export const analyzeDamage = async (text) => {
-  const response = await axios.post(
-    "https://api.deepseek.com/v1/chat/completions",
-    {
-      model: "deepseek-chat",
-      messages: [
-        {
-          role: "system",
-          content: `
+export const analyzeDamage = async (text, vehicleModel) => {
+  const modelHint = vehicleModel?.trim();
+  const systemRules = modelHint
+    ? `
+You are an automotive damage analysis AI.
+
+The vehicle model is EXACTLY: "${modelHint}"
+Use this exact vehicle model string in vehicleModel.
+
+Return ONLY valid JSON in this format:
+
+{
+  "vehicleModel": "${modelHint}",
+  "parts": ["array of damaged part names WITHOUT vehicle prefix"]
+}
+
+RULES:
+- vehicleModel MUST be exactly "${modelHint}"
+- parts must be bare part descriptions only (e.g. "front bumper", "left headlight")
+- Do NOT prefix parts with make or model
+- Normalize parts (bumper, headlight, door, etc.)
+- Output MUST be valid JSON only
+`
+    : `
 You are an automotive damage analysis AI.
 
 Return ONLY valid JSON in this format:
@@ -19,11 +34,20 @@ Return ONLY valid JSON in this format:
 }
 
 RULES:
-- Detect vehicle model (e.g. chr → Toyota CHR)
+- Detect vehicle model (e.g. chr → Toyota C-HR)
 - Extract only damaged parts
 - Normalize parts (bumper, headlight, door, etc.)
 - Output MUST be valid JSON only
-          `
+`;
+
+  const response = await axios.post(
+    "https://api.deepseek.com/v1/chat/completions",
+    {
+      model: "deepseek-chat",
+      messages: [
+        {
+          role: "system",
+          content: systemRules.trim(),
         },
         {
           role: "user",

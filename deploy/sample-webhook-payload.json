@@ -1,0 +1,39 @@
+{
+  "type": "vendor_quotation",
+  "from": "sales@ceylonautomobile.co.nz",
+  "to": "primary-vendor@example.co.nz",
+  "bcc": ["bcc-vendor1@example.co.nz", "bcc-vendor2@example.co.nz"],
+  "subject": "Quotation Request – Vehicle No. Toyota Aqua - QAY557 – Quotation No. Q-2026-0042",
+  "text": "Dear Supplier,\n\nI hope you are doing well.\n\nWe would like to request a quotation for the following parts for Vehicle No. Toyota Aqua - QAY557, under Quotation No. Q-2026-0042.\n\n1. Toyota Aqua Front Bumper (Qty: 1)\n2. Toyota Aqua Left Headlight (Qty: 1)\n\nKindly provide your best possible pricing for the above items by completing the quotation form provided through the secure link below or reply to this email with the pricing for the above items.\n\nPlease submit your quotation using your unique link below:\n  • NZ Parts Supply Ltd: https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-primary\n  • Auto Parts Direct: https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-bcc1\n  • Pacific Spares: https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-bcc2\n\nThank you for your support. We look forward to your prompt response.\n\nBest regards,\n\nCeylon Automobile\nhttps://ceylonautomobile.co.nz/\n13 Cranwell Street, Henderson, Auckland 0612\nPhone: 021 214 7160\n\n1 reference image(s) attached to this email.",
+  "html": "<div style=\"font-family:Arial,Helvetica,sans-serif;color:#1e293b;line-height:1.5;max-width:640px;\"><p>Dear Supplier,</p><p>I hope you are doing well.</p><p>We would like to request a quotation for the following parts for <strong>Vehicle No. Toyota Aqua - QAY557</strong>, under <strong>Quotation No. Q-2026-0042</strong>.</p><ul><li>Toyota Aqua Front Bumper (Qty: 1)</li><li>Toyota Aqua Left Headlight (Qty: 1)</li></ul><p>Kindly provide your best possible pricing for the above items by completing the quotation form through the secure link below or reply to this email with the pricing for the above items.</p><p>Please submit your quotation using your unique link below:</p><ul><li><strong>NZ Parts Supply Ltd</strong> — <a href=\"https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-primary\" style=\"color:#dc2626;\">Submit Quotation</a></li><li><strong>Auto Parts Direct</strong> — <a href=\"https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-bcc1\" style=\"color:#dc2626;\">Submit Quotation</a></li><li><strong>Pacific Spares</strong> — <a href=\"https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-bcc2\" style=\"color:#dc2626;\">Submit Quotation</a></li></ul><p>Thank you for your support. We look forward to your prompt response.</p><div style=\"margin-top:24px;border-top:1px solid #e2e8f0;padding-top:16px;\"><p style=\"margin:0 0 8px;\">Best regards,</p><p style=\"margin:0;font-weight:600;\">Ceylon Automobile</p><p style=\"margin:4px 0 0;\"><a href=\"https://ceylonautomobile.co.nz/\" style=\"color:#dc2626;text-decoration:none;\">https://ceylonautomobile.co.nz/</a></p><p style=\"margin:4px 0 0;color:#64748b;font-size:14px;\">13 Cranwell Street, Henderson, Auckland 0612</p><p style=\"margin:4px 0 0;color:#64748b;font-size:14px;\">Phone: 021 214 7160</p></div></div><p><em>1 reference image(s) attached to this email.</em></p>",
+  "companyName": "Supplier",
+  "vehicleNumber": "Toyota Aqua - QAY557",
+  "quotationNumber": "Q-2026-0042",
+  "responseUrl": "https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-primary",
+  "parts": [
+    { "partName": "Toyota Aqua Front Bumper", "quantity": 1 },
+    { "partName": "Toyota Aqua Left Headlight", "quantity": 1 }
+  ],
+  "attachments": [
+    {
+      "filename": "damage-photo.jpeg",
+      "contentType": "image/jpeg",
+      "contentBase64": "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDAQAREhgYGEAaABAbFhgUGx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8f/9oADAMBAAIRAxEAPwD3+iiigD//2Q=="
+    }
+  ],
+  "vendorLinks": [
+    {
+      "companyName": "NZ Parts Supply Ltd",
+      "responseUrl": "https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-primary"
+    },
+    {
+      "companyName": "Auto Parts Direct",
+      "responseUrl": "https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-bcc1"
+    },
+    {
+      "companyName": "Pacific Spares",
+      "responseUrl": "https://autoquote.ceylonautomobile.co.nz/vendor-quotation-response/sample-token-bcc2"
+    }
+  ],
+  "batchEmail": true
+}

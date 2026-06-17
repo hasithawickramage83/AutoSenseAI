@@ -208,3 +208,90 @@ export function downloadPurchaseOrderPdf(po: PurchaseOrderPdfData) {
 
   doc.save(`purchase-order-${po.id}.pdf`);
 }
+
+export interface VendorComparisonPdfData {
+  quotationId: string;
+  vehicle: string;
+  comparison: {
+    items: {
+      partName: string;
+      quantity: number;
+      offers: { vendorName: string; unitPrice: number }[];
+      lowestVendorName: string | null;
+      lowestPrice: number | null;
+    }[];
+    vendorTotals: { vendorName: string; total: number }[];
+    recommendedVendor: { vendorName: string; total: number } | null;
+    bestMixTotal: number;
+    savingsVsHighest: number;
+  };
+}
+
+export function downloadVendorComparisonPdf(data: VendorComparisonPdfData) {
+  const doc = new jsPDF();
+  addHeader(doc, "Vendor Quotation Comparison");
+
+  let y = 42;
+  doc.setFontSize(10);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Quotation: ${data.quotationId}`, 14, y);
+  y += 6;
+  doc.text(`Vehicle: ${data.vehicle}`, 14, y);
+  y += 6;
+  if (data.comparison.recommendedVendor) {
+    doc.text(
+      `Recommended: ${data.comparison.recommendedVendor.vendorName} — ${fmt(data.comparison.recommendedVendor.total)}`,
+      14,
+      y,
+    );
+    y += 6;
+  }
+  doc.text(`Best mix total: ${fmt(data.comparison.bestMixTotal)}`, 14, y);
+  y += 10;
+
+  for (const item of data.comparison.items) {
+    if (y > 250) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${item.partName} (×${item.quantity})`, 14, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Vendor", "Unit Price", "Lowest"]],
+      body: item.offers.map((o) => [
+        o.vendorName,
+        fmt(o.unitPrice),
+        o.vendorName === item.lowestVendorName ? "Yes" : "",
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: [30, 64, 175] },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  }
+
+  if (data.comparison.vendorTotals.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [["Vendor", "Total"]],
+      body: [
+        ...data.comparison.vendorTotals.map((v) => [
+          v.vendorName +
+            (v.vendorName === data.comparison.recommendedVendor?.vendorName ? " ★" : ""),
+          fmt(v.total),
+        ]),
+        ["Best item-by-item mix", fmt(data.comparison.bestMixTotal)],
+      ],
+      theme: "grid",
+      headStyles: { fillColor: [30, 64, 175] },
+    });
+  }
+
+  doc.save(`vendor-comparison-${data.quotationId}.pdf`);
+}

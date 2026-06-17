@@ -1,5 +1,5 @@
 import { prisma } from "../config/db.js";
-import { normalizePart } from "../utils/normalizePart.js";
+import { findStockForLine } from "./invoiceStock.service.js";
 
 /**
  * Match parts to supplier stock. Invoice includes all requested parts.
@@ -16,36 +16,14 @@ export const hybridEngine = async (aiResult) => {
   const { vehicleModel, parts } = aiResult;
 
   for (const part of parts) {
-    const cleanPart = normalizePart(part);
-
-    const stockItem = await prisma.stock.findFirst({
-      where: {
-        part: {
-          name: {
-            contains: cleanPart,
-            mode: "insensitive",
-          },
-          vehicleModel: {
-            name: {
-              contains: vehicleModel || "",
-              mode: "insensitive",
-            },
-          },
-          activeStatus: 1,
-        },
-      },
-      include: {
-        part: {
-          include: {
-            vehicleModel: true,
-          },
-        },
-      },
-    });
+    const stockItem = await findStockForLine(
+      { partName: part },
+      { vehicleModel: vehicleModel || "" },
+    );
 
     const catalogPrice = stockItem ? Number(stockItem.price) : 0;
     const inStock = Boolean(stockItem && stockItem.quantity > 0);
-    const partName = `${vehicleModel || "Unknown"} ${cleanPart}`;
+    const partName = String(part).trim();
 
     result.invoice.push({
       partName,
@@ -68,3 +46,43 @@ export const hybridEngine = async (aiResult) => {
 
   return result;
 };
+
+/** Build invoice/PO split from explicit quotation parts (supplier custom quotes). */
+export async function hybridEngineFromParts(quotationParts, vehicleModel = "") {
+  const result = {
+    invoice: [],
+    purchaseOrders: [],
+    allInStock: true,
+  };
+
+  for (const row of quotationParts) {
+    const partName = String(row.name ?? row.partName);
+    const quantity = Math.max(1, Number(row.qty ?? row.quantity ?? 1));
+    const stock = await findStockForLine(
+      { partName, stockId: row.stockId ?? null },
+      { vehicleModel },
+    );
+    const catalogPrice = stock ? Number(stock.price) : Number(row.price ?? 0);
+    const inStock = Boolean(stock && stock.quantity >= quantity);
+
+    result.invoice.push({
+      partName,
+      quantity,
+      price: inStock ? catalogPrice : 0,
+      inStock,
+      stockId: stock?.id ?? null,
+    });
+
+    if (!inStock) {
+      result.allInStock = false;
+      result.purchaseOrders.push({
+        partName,
+        quantity,
+        price: catalogPrice,
+        stockId: stock?.id ?? null,
+      });
+    }
+  }
+
+  return result;
+}

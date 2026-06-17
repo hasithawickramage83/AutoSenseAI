@@ -43,6 +43,7 @@ export interface Quotation {
   parts: { name: string; qty: number; price: number }[];
   labourCost: number;
   status: "Pending" | "Processing" | "Approved" | "Invoiced" | "PO Raised";
+  source?: "WORKSHOP" | "SUPPLIER";
   createdAt: number;
   invoiceId?: string;
   poId?: string;
@@ -53,10 +54,18 @@ export interface Invoice {
   quotationId: string;
   workshopName: string;
   vehicle?: string;
-  parts: { name: string; qty: number; price: number }[];
+  parts: { name: string; qty: number; price: number; stockId?: string }[];
   labourCost: number;
   total: number;
   status?: string;
+  stockReady?: boolean;
+  awaitingStock?: boolean;
+  stockItems?: {
+    partName: string;
+    requiredQty: number;
+    availableQty: number;
+    inStock: boolean;
+  }[];
   createdAt: number;
 }
 
@@ -326,6 +335,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       quotations: quotations.map((q) => ({
         ...q,
         photos: [],
+        source: (q as { source?: string }).source as Quotation["source"],
         status: q.status as Quotation["status"],
         severity: q.severity as Quotation["severity"],
         recommendations: q.recommendations ?? [],

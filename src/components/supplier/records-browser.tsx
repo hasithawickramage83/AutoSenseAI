@@ -11,10 +11,19 @@ import {
   InvoiceDetailDialog,
   PurchaseOrderDetailDialog,
 } from "./detail-dialogs";
-import { Search, Eye, Download, FileText, Receipt, ShoppingCart } from "lucide-react";
+import { InvoiceEditDialog } from "./invoice-edit-dialog";
+import { Search, Eye, Download, FileText, Receipt, ShoppingCart, Pencil } from "lucide-react";
 import { format } from "date-fns";
 
 type RecordsTab = "quotations" | "invoices" | "pos";
+
+function isDraftInvoice(inv: Invoice) {
+  return inv.status !== "Sent" && inv.status?.toLowerCase() !== "paid";
+}
+
+function canEditInvoice(inv: Invoice) {
+  return isDraftInvoice(inv) && (Boolean(inv.awaitingStock) || Boolean(inv.stockReady));
+}
 
 export function SupplierRecordsBrowser({
   defaultTab = "quotations",
@@ -23,11 +32,12 @@ export function SupplierRecordsBrowser({
   defaultTab?: RecordsTab;
   compact?: boolean;
 }) {
-  const { state } = useStore();
+  const { state, refreshSupplierData } = useStore();
   const [tab, setTab] = useState<RecordsTab>(defaultTab);
   const [search, setSearch] = useState("");
   const [viewQuote, setViewQuote] = useState<Quotation | null>(null);
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [viewPo, setViewPo] = useState<PurchaseOrder | null>(null);
 
   const filteredQuotes = useMemo(() => filterQuotes(state.quotations, search), [state.quotations, search]);
@@ -105,16 +115,34 @@ export function SupplierRecordsBrowser({
               <RecordList
                 empty="No invoices found."
                 className={listHeight}
-                items={filteredInvoices.map((inv) => (
+                items={filteredInvoices.map((inv) => {
+                  const badgeLabel =
+                    inv.status === "Sent"
+                      ? "Sent"
+                      : inv.awaitingStock
+                        ? "Awaiting stock"
+                        : inv.stockReady
+                          ? "Ready to send"
+                          : inv.status ?? "Draft";
+                  const badgeTone =
+                    inv.status === "Sent"
+                      ? "success"
+                      : inv.awaitingStock
+                        ? "warning"
+                        : inv.stockReady
+                          ? undefined
+                          : "warning";
+                  return (
                   <RecordRow
                     key={inv.id}
                     title={inv.workshopName}
                     subtitle={`${inv.vehicle ?? "—"} · ${inv.id}`}
                     meta={format(inv.createdAt, "dd MMM yyyy")}
-                    badge={inv.status ?? "Draft"}
-                    badgeTone={inv.status === "Sent" ? "success" : inv.status?.toLowerCase() === "paid" ? "success" : "warning"}
+                    badge={badgeLabel}
+                    badgeTone={badgeTone as "success" | "warning" | "danger" | undefined}
                     amount={`$${inv.total.toLocaleString()}`}
                     onView={() => setViewInvoice(inv)}
+                    onEdit={canEditInvoice(inv) ? () => setEditInvoice(inv) : undefined}
                     onDownload={() =>
                       downloadInvoicePdf({
                         id: inv.id,
@@ -122,13 +150,13 @@ export function SupplierRecordsBrowser({
                         workshopName: inv.workshopName,
                         vehicle: inv.vehicle,
                         parts: inv.parts,
-                        labourCost: inv.labourCost,
+                        labourCost: 0,
                         total: inv.total,
                         createdAt: inv.createdAt,
                       })
                     }
                   />
-                ))}
+                );})}
               />
             </TabsContent>
             <TabsContent value="pos">
@@ -174,6 +202,18 @@ export function SupplierRecordsBrowser({
 
       <QuotationDetailDialog quotation={viewQuote} open={viewQuote !== null} onOpenChange={(o) => !o && setViewQuote(null)} />
       <InvoiceDetailDialog invoice={viewInvoice} open={viewInvoice !== null} onOpenChange={(o) => !o && setViewInvoice(null)} />
+      <InvoiceEditDialog
+        invoice={editInvoice}
+        stock={state.supplierStock}
+        open={editInvoice !== null}
+        onOpenChange={(o) => !o && setEditInvoice(null)}
+        onSaved={async () => {
+          await refreshSupplierData();
+        }}
+        onSent={async () => {
+          await refreshSupplierData();
+        }}
+      />
       <PurchaseOrderDetailDialog purchaseOrder={viewPo} open={viewPo !== null} onOpenChange={(o) => !o && setViewPo(null)} />
     </>
   );
@@ -202,6 +242,7 @@ function RecordRow({
   badgeTone,
   amount,
   onView,
+  onEdit,
   onDownload,
 }: {
   title: string;
@@ -211,6 +252,7 @@ function RecordRow({
   badgeTone?: "success" | "warning" | "danger";
   amount: string;
   onView: () => void;
+  onEdit?: () => void;
   onDownload: () => void;
 }) {
   const badgeClass =
@@ -238,6 +280,12 @@ function RecordRow({
           <Eye className="mr-1 h-3.5 w-3.5" />
           Details
         </Button>
+        {onEdit && (
+          <Button size="sm" variant="outline" onClick={onEdit}>
+            <Pencil className="mr-1 h-3.5 w-3.5" />
+            Edit
+          </Button>
+        )}
         <Button size="sm" variant="ghost" onClick={onDownload}>
           <Download className="h-3.5 w-3.5" />
         </Button>

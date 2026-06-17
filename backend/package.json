@@ -8,7 +8,8 @@
     "start": "node server.js",
     "db:push": "prisma db push && prisma generate",
     "db:studio": "prisma studio",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "db:import-vendors-from-mail": "node prisma/import-vendors-from-sent-mail.js"
   },
   "keywords": [],
   "author": "",
@@ -21,9 +22,10 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "imapflow": "^1.4.1",
     "jsonwebtoken": "^9.0.3",
+    "mailparser": "^3.9.10",
     "multer": "^2.1.1",
-    "nodemailer": "^8.0.9",
     "prisma": "^5.22.0"
   },
   "devDependencies": {

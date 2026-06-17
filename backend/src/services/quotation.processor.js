@@ -1,5 +1,5 @@
 import { prisma } from "../config/db.js";
-import { hybridEngine } from "./hybrid.engine.js";
+import { hybridEngine, hybridEngineFromParts } from "./hybrid.engine.js";
 import { sendInvoiceEmail } from "./email.service.js";
 import { addActivityLog, buildQuotationParts } from "../utils/activityLog.js";
 import { nextInvoiceId, nextPurchaseOrderId } from "../utils/documentIds.js";
@@ -34,7 +34,10 @@ export async function processQuotationById(quotationId, { actorUserId = null } =
   }
 
   const aiResult = quotation.aiResult;
-  const result = await hybridEngine(aiResult);
+  const result =
+    quotation.source === "SUPPLIER"
+      ? await hybridEngineFromParts(quotation.parts, aiResult?.vehicleModel)
+      : await hybridEngine(aiResult);
   const parts = buildQuotationParts(result.invoice);
   const labourCost = quotation.labourCost;
   const partsTotal = parts.reduce((sum, p) => sum + p.price * p.qty, 0);
@@ -67,6 +70,7 @@ export async function processQuotationById(quotationId, { actorUserId = null } =
           partName: l.partName,
           quantity: l.quantity ?? 1,
           price: l.price,
+          stockId: l.stockId ?? null,
         })),
         labourCost,
         total: invoiceTotal,

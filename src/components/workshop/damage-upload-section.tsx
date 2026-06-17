@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore, type DamagePhoto } from "@/lib/store";
-import { analyzeDamagePreview, processDamage, ApiError } from "@/lib/api";
+import { analyzeDamagePreview, processDamage, fetchWorkshopVehicleModels, ApiError } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SeverityBadge } from "./status-badge";
@@ -34,7 +40,8 @@ interface DamageReportView {
 export function DamageUploadSection({ onDone }: { onDone: () => void }) {
   const { state, addLog, refreshWorkshopData } = useStore();
   const [photos, setPhotos] = useState<DamagePhoto[]>([]);
-  const [vehicle, setVehicle] = useState("Toyota CHR");
+  const [vehicleModels, setVehicleModels] = useState<{ id: string; name: string }[]>([]);
+  const [vehicle, setVehicle] = useState("");
   const [description, setDescription] = useState(
     "Front bumper smashed in motorway accident. Headlight cracked.",
   );
@@ -48,6 +55,20 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
   const quotationSavedRef = useRef(false);
 
   const previousUploads = [...state.quotations].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6);
+
+  useEffect(() => {
+    fetchWorkshopVehicleModels()
+      .then((models) => {
+        setVehicleModels(models);
+        setVehicle((current) => {
+          if (current) return current;
+          const preferred =
+            models.find((m) => m.name.toLowerCase() === "toyota c-hr") ?? models[0];
+          return preferred?.name ?? "";
+        });
+      })
+      .catch(() => toast.error("Failed to load vehicle models"));
+  }, []);
 
   function togglePart(part: string) {
     setSelectedParts((prev) => {
@@ -83,7 +104,7 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
   }
 
   useEffect(() => {
-    if (!description.trim() || !state.user) {
+    if (!description.trim() || !state.user || !vehicle.trim()) {
       setReport(null);
       setSelectedParts(new Set());
       quotationSavedRef.current = false;
@@ -119,6 +140,10 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
   }, [vehicle, description, state.user]);
 
   async function runAnalysis() {
+    if (!vehicle.trim()) {
+      toast.error("Select a vehicle make / model");
+      return;
+    }
     if (!description.trim()) {
       toast.error("Enter a damage description");
       return;
@@ -215,7 +240,18 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="vehicle">Vehicle make / model</Label>
-                <Input id="vehicle" value={vehicle} onChange={(e) => setVehicle(e.target.value)} className="bg-white" />
+                <Select value={vehicle || undefined} onValueChange={setVehicle}>
+                  <SelectTrigger id="vehicle" className="bg-white">
+                    <SelectValue placeholder="Select vehicle model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicleModels.map((m) => (
+                      <SelectItem key={m.id} value={m.name}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

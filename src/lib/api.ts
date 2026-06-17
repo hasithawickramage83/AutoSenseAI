@@ -391,6 +391,10 @@ export async function processDamage(payload: {
   });
 }
 
+export async function fetchWorkshopVehicleModels() {
+  return request<{ id: string; name: string }[]>("/api/workshop/vehicle-models");
+}
+
 export async function fetchWorkshopQuotations() {
   return request<
     {
@@ -477,6 +481,38 @@ export async function fetchSupplierStock() {
   return request<SupplierStockItem[]>("/api/supplier/stock");
 }
 
+export async function fetchSupplierStockBrowse(params: {
+  search?: string;
+  vehicleModel?: string;
+  partName?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params.search?.trim()) qs.set("search", params.search.trim());
+  if (params.vehicleModel && params.vehicleModel !== "all") {
+    qs.set("vehicleModel", params.vehicleModel);
+  }
+  if (params.partName && params.partName !== "all") {
+    qs.set("partName", params.partName);
+  }
+  if (params.limit != null) qs.set("limit", String(params.limit));
+  if (params.offset != null) qs.set("offset", String(params.offset));
+  const query = qs.toString();
+  return request<{
+    data: SupplierStockItem[];
+    total: number;
+    limit: number;
+    offset: number;
+  }>(`/api/supplier/stock${query ? `?${query}` : ""}`);
+}
+
+export async function fetchSupplierStockFilters() {
+  return request<{ vehicleModels: string[]; partNames: string[] }>(
+    "/api/supplier/stock/filters",
+  );
+}
+
 export type SupplierQuotation = {
   id: string;
   workshopId: string;
@@ -537,16 +573,47 @@ export async function fetchSupplierInvoices() {
       labourCost: number;
       total: number;
       status: string;
+      stockReady?: boolean;
+      awaitingStock?: boolean;
+      stockItems?: {
+        partName: string;
+        requiredQty: number;
+        availableQty: number;
+        inStock: boolean;
+      }[];
       createdAt: number;
     }[]
   >("/api/supplier/invoices");
 }
 
+export async function fetchSupplierWorkshops() {
+  return request<{ id: string; name: string; email: string }[]>("/api/supplier/workshops");
+}
+
+export async function createSupplierCustomQuotation(payload: {
+  vehicleModel: string;
+  vehicleNumber: string;
+  description?: string;
+  vendorIds: string[];
+  parts: { stockId: string; qty: number }[];
+  images?: { name: string; dataUrl: string }[];
+  emailMode?: "separate" | "bcc";
+  primaryVendorId?: string;
+}) {
+  return request<{
+    message: string;
+    quotation: { id: string; status: string; vehicle: string; workshopName: string; source?: string };
+    requests: VendorQuotationRequest[];
+  }>("/api/supplier/quotations/custom", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function updateSupplierInvoice(
   id: string,
   payload: {
-    lineItems: { name: string; qty: number; price: number }[];
-    labourCost?: number;
+    lineItems: { stockId: string; qty: number; price: number }[];
   },
 ) {
   return request<{
@@ -554,10 +621,18 @@ export async function updateSupplierInvoice(
     quotationId: string;
     workshopName: string;
     vehicle: string;
-    parts: { name: string; qty: number; price: number }[];
+    parts: { name: string; qty: number; price: number; stockId?: string }[];
     labourCost: number;
     total: number;
     status: string;
+    stockReady?: boolean;
+    awaitingStock?: boolean;
+    stockItems?: {
+      partName: string;
+      requiredQty: number;
+      availableQty: number;
+      inStock: boolean;
+    }[];
     createdAt: number;
   }>(`/api/supplier/invoices/${id}`, {
     method: "PUT",
@@ -618,4 +693,230 @@ export async function sendSupplierPurchaseOrder(quotationId: string) {
     id: string;
     status: string;
   }>(`/api/supplier/purchase-orders/${quotationId}/send`, { method: "POST" });
+}
+
+// ─── Admin: Vendors ──────────────────────────────────────────────────────────
+
+export interface ApiVendor {
+  id: string;
+  companyName: string;
+  contactPerson: string;
+  email: string;
+  address: string;
+  contactNumber: string;
+  status: "ACTIVE" | "INACTIVE";
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PaginatedVendors {
+  data: ApiVendor[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export async function fetchVendors(params?: {
+  search?: string;
+  status?: string;
+  sort?: string;
+  order?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.search) q.set("search", params.search);
+  if (params?.status) q.set("status", params.status);
+  if (params?.sort) q.set("sort", params.sort);
+  if (params?.order) q.set("order", params.order);
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return request<PaginatedVendors>(`/api/admin/vendors${qs ? `?${qs}` : ""}`);
+}
+
+export async function fetchVendor(id: string) {
+  return request<ApiVendor>(`/api/admin/vendors/${id}`);
+}
+
+export async function createVendor(payload: {
+  companyName: string;
+  contactPerson: string;
+  email: string;
+  address?: string;
+  contactNumber?: string;
+  status?: "ACTIVE" | "INACTIVE";
+}) {
+  return request<ApiVendor>("/api/admin/vendors", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateVendor(
+  id: string,
+  payload: Partial<{
+    companyName: string;
+    contactPerson: string;
+    email: string;
+    address: string;
+    contactNumber: string;
+    status: "ACTIVE" | "INACTIVE";
+  }>,
+) {
+  return request<ApiVendor>(`/api/admin/vendors/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteVendor(id: string) {
+  return request<{ message: string }>(`/api/admin/vendors/${id}`, { method: "DELETE" });
+}
+
+// ─── Supplier: Vendor quotations ───────────────────────────────────────────
+
+export interface VendorQuotationRequestPart {
+  id?: number;
+  partName: string;
+  quantity: number;
+}
+
+export interface VendorQuotationRequest {
+  id: number;
+  quotationId: string;
+  vendorId: number;
+  vendorName: string;
+  vendorEmail: string;
+  vehicle?: string;
+  status: string;
+  expiresAt: number;
+  sentAt: number | null;
+  openedAt: number | null;
+  respondedAt: number | null;
+  createdAt: number;
+  parts: VendorQuotationRequestPart[];
+  response: {
+    id: number;
+    estimatedDeliveryTime: string | null;
+    remarks: string | null;
+    lineItems: { partName: string; quantity: number; unitPrice: number }[];
+    submittedAt: number;
+  } | null;
+  activities: { id: number; message: string; type: string; createdAt: number }[];
+}
+
+export interface VendorComparisonOffer {
+  requestId: number;
+  vendorId: number;
+  vendorName: string;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface VendorComparisonItem {
+  partName: string;
+  quantity: number;
+  offers: VendorComparisonOffer[];
+  lowestVendorId: number | null;
+  lowestVendorName: string | null;
+  lowestPrice: number | null;
+}
+
+export interface VendorComparison {
+  items: VendorComparisonItem[];
+  vendorTotals: {
+    vendorId: number;
+    vendorName: string;
+    requestId: number;
+    total: number;
+    respondedAt: number;
+  }[];
+  overallCheapest: { vendorId: number; vendorName: string; total: number } | null;
+  bestMixTotal: number;
+  recommendedVendor: { vendorId: number; vendorName: string; total: number } | null;
+  savingsVsHighest: number;
+  savingsBestMix: number;
+  allResponded: boolean;
+  respondedCount: number;
+  totalRequests: number;
+}
+
+export async function fetchSupplierActiveVendors() {
+  return request<
+    { id: string; companyName: string; contactPerson: string; email: string }[]
+  >("/api/supplier/vendors");
+}
+
+export async function sendVendorQuotationRequests(payload: {
+  quotationId: string;
+  vendorIds: string[];
+  parts: { partName: string; quantity: number }[];
+}) {
+  return request<{ message: string; requests: VendorQuotationRequest[] }>(
+    "/api/supplier/vendor-quotations/send",
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export async function fetchVendorQuotationRequests(params?: {
+  quotationId?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.quotationId) q.set("quotationId", params.quotationId);
+  if (params?.status) q.set("status", params.status);
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return request<{ data: VendorQuotationRequest[]; pagination: { total: number } }>(
+    `/api/supplier/vendor-quotations${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function fetchVendorComparisonQuotations() {
+  return request<
+    {
+      id: string;
+      vehicle: string;
+      status: string;
+      source: string;
+      workshopName: string;
+      description: string;
+      createdAt: number;
+    }[]
+  >("/api/supplier/vendor-quotations/quotations-for-comparison");
+}
+
+export async function fetchVendorQuotationComparison(quotationId: string) {
+  return request<{
+    quotation: { id: string; vehicle: string; status: string };
+    requests: VendorQuotationRequest[];
+    comparison: VendorComparison;
+  }>(`/api/supplier/vendor-quotations/${quotationId}/comparison`);
+}
+
+/** Public vendor form — no auth */
+export async function fetchVendorResponseForm(token: string) {
+  return request<{
+    vendorName: string;
+    vehicleNumber: string;
+    quotationNumber: string;
+    expiresAt: number;
+    parts: { partName: string; quantity: number }[];
+  }>(`/api/vendor-quotation/${token}`);
+}
+
+export async function submitVendorResponse(
+  token: string,
+  payload: {
+    lineItems: { partName: string; unitPrice: number }[];
+    estimatedDeliveryTime?: string;
+    remarks?: string;
+  },
+) {
+  return request<{ message: string }>(`/api/vendor-quotation/${token}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
