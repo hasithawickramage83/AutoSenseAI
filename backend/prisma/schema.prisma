@@ -31,10 +31,23 @@ model User {
   activityLogs ActivityLog[]
 }
 
+model VehicleMake {
+  id        Int             @id @default(autoincrement())
+  name      String          @unique
+  createdAt DateTime        @default(now())
+  models    VehicleModel[]
+  vendors   VendorMake[]
+}
+
 model VehicleModel {
-  id    Int    @id @default(autoincrement())
-  name  String @unique
-  parts Part[]
+  id      Int                  @id @default(autoincrement())
+  makeId  Int?
+  name    String
+  make    VehicleMake?         @relation(fields: [makeId], references: [id], onDelete: Cascade)
+  parts   Part[]
+  vendors VendorVehicleModel[]
+
+  @@unique([makeId, name])
 }
 
 model Part {
@@ -135,6 +148,26 @@ model Vendor {
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
   quotationRequests   VendorQuotationRequest[]
+  makes               VendorMake[]
+  vehicleModels       VendorVehicleModel[]
+}
+
+model VendorMake {
+  vendorId Int
+  makeId   Int
+  vendor   Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  make     VehicleMake @relation(fields: [makeId], references: [id], onDelete: Cascade)
+
+  @@id([vendorId, makeId])
+}
+
+model VendorVehicleModel {
+  vendorId       Int
+  vehicleModelId Int
+  vendor         Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  vehicleModel   VehicleModel @relation(fields: [vehicleModelId], references: [id], onDelete: Cascade)
+
+  @@id([vendorId, vehicleModelId])
 }
 
 model VendorQuotationRequest {

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkshopRouteImport } from './routes/workshop'
+import { Route as VendorRegisterRouteImport } from './routes/vendor-register'
 import { Route as SupplierRouteImport } from './routes/supplier'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -18,6 +19,11 @@ import { Route as VendorQuotationResponseTokenRouteImport } from './routes/vendo
 const WorkshopRoute = WorkshopRouteImport.update({
   id: '/workshop',
   path: '/workshop',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VendorRegisterRoute = VendorRegisterRouteImport.update({
+  id: '/vendor-register',
+  path: '/vendor-register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SupplierRoute = SupplierRouteImport.update({
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/supplier': typeof SupplierRoute
+  '/vendor-register': typeof VendorRegisterRoute
   '/workshop': typeof WorkshopRoute
   '/vendor-quotation-response/$token': typeof VendorQuotationResponseTokenRoute
 }
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/supplier': typeof SupplierRoute
+  '/vendor-register': typeof VendorRegisterRoute
   '/workshop': typeof WorkshopRoute
   '/vendor-quotation-response/$token': typeof VendorQuotationResponseTokenRoute
 }
@@ -61,6 +69,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/supplier': typeof SupplierRoute
+  '/vendor-register': typeof VendorRegisterRoute
   '/workshop': typeof WorkshopRoute
   '/vendor-quotation-response/$token': typeof VendorQuotationResponseTokenRoute
 }
@@ -70,6 +79,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/supplier'
+    | '/vendor-register'
     | '/workshop'
     | '/vendor-quotation-response/$token'
   fileRoutesByTo: FileRoutesByTo
@@ -77,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/supplier'
+    | '/vendor-register'
     | '/workshop'
     | '/vendor-quotation-response/$token'
   id:
@@ -84,6 +95,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/supplier'
+    | '/vendor-register'
     | '/workshop'
     | '/vendor-quotation-response/$token'
   fileRoutesById: FileRoutesById
@@ -92,6 +104,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   SupplierRoute: typeof SupplierRoute
+  VendorRegisterRoute: typeof VendorRegisterRoute
   WorkshopRoute: typeof WorkshopRoute
   VendorQuotationResponseTokenRoute: typeof VendorQuotationResponseTokenRoute
 }
@@ -103,6 +116,13 @@ declare module '@tanstack/react-router' {
       path: '/workshop'
       fullPath: '/workshop'
       preLoaderRoute: typeof WorkshopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vendor-register': {
+      id: '/vendor-register'
+      path: '/vendor-register'
+      fullPath: '/vendor-register'
+      preLoaderRoute: typeof VendorRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/supplier': {
@@ -140,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   SupplierRoute: SupplierRoute,
+  VendorRegisterRoute: VendorRegisterRoute,
   WorkshopRoute: WorkshopRoute,
   VendorQuotationResponseTokenRoute: VendorQuotationResponseTokenRoute,
 }

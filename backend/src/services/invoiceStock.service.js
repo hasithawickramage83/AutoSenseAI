@@ -1,13 +1,31 @@
 import { prisma } from "../config/db.js";
 import { normalizePart } from "../utils/normalizePart.js";
 import { barePartName } from "../utils/vehiclePartUtils.js";
+import { buildVehicleModelFilter } from "../utils/vehicleCatalog.js";
+
+const stockInclude = {
+  part: { include: { vehicleModel: { include: { make: true } } } },
+};
+
+function partWhereWithVehicle(vehicleHint) {
+  const vehicleModel = buildVehicleModelFilter(vehicleHint);
+  return vehicleModel ? { vehicleModel } : {};
+}
+
+async function findBestStock(partWhere) {
+  return prisma.stock.findFirst({
+    where: { part: partWhere },
+    orderBy: [{ quantity: "desc" }, { price: "desc" }, { id: "asc" }],
+    include: stockInclude,
+  });
+}
 
 /** Resolve catalog stock for an invoice line (by stockId or part name). */
 export async function findStockForLine(line, options = {}) {
   if (line.stockId != null) {
     return prisma.stock.findUnique({
       where: { id: Number(line.stockId) },
-      include: { part: { include: { vehicleModel: true } } },
+      include: stockInclude,
     });
   }
 
@@ -30,24 +48,33 @@ export async function findStockForLine(line, options = {}) {
         : partName;
   }
 
+  partHint = partHint.trim();
+  if (!partHint) return null;
+
+  const vehicleClause = partWhereWithVehicle(vehicleHint);
+  const basePartWhere = {
+    activeStatus: 1,
+    ...vehicleClause,
+  };
+
+  const exact = await findBestStock({
+    ...basePartWhere,
+    name: { equals: partHint, mode: "insensitive" },
+  });
+  if (exact) return exact;
+
+  const contains = await findBestStock({
+    ...basePartWhere,
+    name: { contains: partHint, mode: "insensitive" },
+  });
+  if (contains) return contains;
+
   const cleanPart = normalizePart(partHint);
   if (!cleanPart) return null;
 
-  return prisma.stock.findFirst({
-    where: {
-      part: {
-        name: { contains: cleanPart, mode: "insensitive" },
-        activeStatus: 1,
-        ...(vehicleHint
-          ? {
-              vehicleModel: {
-                name: { equals: vehicleHint, mode: "insensitive" },
-              },
-            }
-          : {}),
-      },
-    },
-    include: { part: { include: { vehicleModel: true } } },
+  return findBestStock({
+    ...basePartWhere,
+    name: { contains: cleanPart, mode: "insensitive" },
   });
 }
 

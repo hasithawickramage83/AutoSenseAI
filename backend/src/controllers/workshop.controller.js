@@ -1,4 +1,5 @@
 import { prisma } from "../config/db.js";
+import { mapVehicleModel, vehicleModelFullName } from "../utils/vehicleCatalog.js";
 import { addActivityLog, severityFromPartCount } from "../utils/activityLog.js";
 import { parseIntId } from "../utils/parseId.js";
 
@@ -185,10 +186,40 @@ export const deleteQuotation = async (req, res) => {
 export const listVehicleModels = async (_req, res) => {
   try {
     const models = await prisma.vehicleModel.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      include: { make: true },
+      orderBy: [{ make: { name: "asc" } }, { name: "asc" }],
     });
-    res.json(models.map((m) => ({ id: String(m.id), name: m.name })));
+    res.json(
+      models.map((m) => ({
+        id: String(m.id),
+        name: vehicleModelFullName(m),
+      })),
+    );
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const listWorkshopVehicleMakes = async (_req, res) => {
+  try {
+    const makes = await prisma.vehicleMake.findMany({ orderBy: { name: "asc" } });
+    res.json(makes.map((m) => ({ id: String(m.id), name: m.name })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const listWorkshopCatalogModels = async (req, res) => {
+  try {
+    const makeId = parseIntId(req.query.makeId);
+    const where = makeId != null ? { makeId } : {};
+
+    const models = await prisma.vehicleModel.findMany({
+      where,
+      include: { make: true },
+      orderBy: [{ make: { name: "asc" } }, { name: "asc" }],
+    });
+    res.json(models.map(mapVehicleModel));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

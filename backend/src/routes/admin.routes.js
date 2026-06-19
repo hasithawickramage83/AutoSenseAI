@@ -27,6 +27,16 @@ import {
   updateVendor,
   deleteVendor,
 } from "../controllers/vendor.controller.js";
+import {
+  listVehicleMakes,
+  createVehicleMake,
+  updateVehicleMake,
+  deleteVehicleMake,
+  listCatalogVehicleModels,
+  createCatalogVehicleModel,
+  updateCatalogVehicleModel,
+  deleteCatalogVehicleModel,
+} from "../controllers/vehicleMake.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { authorizeRoles } from "../middleware/role.middleware.js";
 
@@ -59,6 +69,17 @@ router.post("/stock", ...adminOnly, createStock);
 router.put("/stock/:id", ...adminOnly, updateStock);
 router.patch("/stock/by-part", ...adminOnly, upsertStockByPart);
 router.delete("/stock/:id", ...adminOnly, deleteStock);
+
+// Vehicle makes & catalog models (for vendor specialization)
+router.get("/vehicle-makes", ...adminOnly, listVehicleMakes);
+router.post("/vehicle-makes", ...adminOnly, createVehicleMake);
+router.put("/vehicle-makes/:id", ...adminOnly, updateVehicleMake);
+router.delete("/vehicle-makes/:id", ...adminOnly, deleteVehicleMake);
+
+router.get("/catalog-vehicle-models", ...adminOnly, listCatalogVehicleModels);
+router.post("/catalog-vehicle-models", ...adminOnly, createCatalogVehicleModel);
+router.put("/catalog-vehicle-models/:id", ...adminOnly, updateCatalogVehicleModel);
+router.delete("/catalog-vehicle-models/:id", ...adminOnly, deleteCatalogVehicleModel);
 
 // Vendors
 router.get("/vendors", ...adminOnly, listVendors);

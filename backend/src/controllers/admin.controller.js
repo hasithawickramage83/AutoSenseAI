@@ -1,5 +1,12 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../config/db.js";
+import {
+  mapVehicleModel,
+  vehicleModelFullName,
+  mapPartRecord,
+  mapStockRecord,
+  buildPartCatalogWhere,
+} from "../utils/vehicleCatalog.js";
 import { parseIntId } from "../utils/parseId.js";
 
 const VALID_ROLES = ["ADMIN", "WORKSHOP", "SUPPLIER"];
@@ -124,10 +131,13 @@ export const deleteUser = async (req, res) => {
 export const listVehicleModels = async (_req, res) => {
   try {
     const models = await prisma.vehicleModel.findMany({
-      include: { _count: { select: { parts: true } } },
-      orderBy: { name: "asc" },
+      include: {
+        make: true,
+        _count: { select: { parts: true } },
+      },
+      orderBy: [{ make: { name: "asc" } }, { name: "asc" }],
     });
-    res.json(models);
+    res.json(models.map(mapVehicleModel));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -135,18 +145,29 @@ export const listVehicleModels = async (_req, res) => {
 
 export const createVehicleModel = async (req, res) => {
   try {
+    const makeId = parseIntId(req.body.makeId);
     const { name } = req.body;
+    if (makeId == null) {
+      return res.status(400).json({ message: "Vehicle make is required" });
+    }
     if (!name?.trim()) {
-      return res.status(400).json({ message: "Name is required" });
+      return res.status(400).json({ message: "Model name is required" });
     }
 
+    const make = await prisma.vehicleMake.findUnique({ where: { id: makeId } });
+    if (!make) return res.status(400).json({ message: "Vehicle make not found" });
+
     const model = await prisma.vehicleModel.create({
-      data: { name: name.trim() },
+      data: { makeId, name: name.trim() },
+      include: {
+        make: true,
+        _count: { select: { parts: true } },
+      },
     });
-    res.status(201).json(model);
+    res.status(201).json(mapVehicleModel(model));
   } catch (err) {
     if (err.code === "P2002") {
-      return res.status(400).json({ message: "Vehicle model already exists" });
+      return res.status(400).json({ message: "This model already exists for the selected make" });
     }
     res.status(500).json({ error: err.message });
   }
@@ -156,23 +177,31 @@ export const updateVehicleModel = async (req, res) => {
   try {
     const id = parseIntId(req.params.id);
     if (id == null) return res.status(400).json({ message: "Invalid vehicle model id" });
+    const makeId = req.body.makeId != null ? parseIntId(req.body.makeId) : undefined;
     const { name } = req.body;
 
-    if (!name?.trim()) {
-      return res.status(400).json({ message: "Name is required" });
+    const data = {};
+    if (makeId != null) data.makeId = makeId;
+    if (name?.trim()) data.name = name.trim();
+    if (!Object.keys(data).length) {
+      return res.status(400).json({ message: "Nothing to update" });
     }
 
     const model = await prisma.vehicleModel.update({
       where: { id },
-      data: { name: name.trim() },
+      data,
+      include: {
+        make: true,
+        _count: { select: { parts: true } },
+      },
     });
-    res.json(model);
+    res.json(mapVehicleModel(model));
   } catch (err) {
     if (err.code === "P2025") {
       return res.status(404).json({ message: "Vehicle model not found" });
     }
     if (err.code === "P2002") {
-      return res.status(400).json({ message: "Vehicle model name already exists" });
+      return res.status(400).json({ message: "This model already exists for the selected make" });
     }
     res.status(500).json({ error: err.message });
   }
@@ -202,19 +231,56 @@ export const deleteVehicleModel = async (req, res) => {
   }
 };
 
+const partInclude = {
+  vehicleModel: { include: { make: true } },
+  stocks: true,
+};
+
+const stockInclude = {
+  part: {
+    include: {
+      vehicleModel: { include: { make: true } },
+    },
+  },
+};
+
+function parsePagination(query, defaultLimit = 50) {
+  const page = Math.max(1, parseInt(query.page, 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(query.limit, 10) || defaultLimit));
+  return { page, limit, skip: (page - 1) * limit };
+}
+
 // ─── Parts ───────────────────────────────────────────────────────────────────
 
-export const listParts = async (_req, res) => {
+export const listParts = async (req, res) => {
   try {
-    const parts = await prisma.part.findMany({
-      where: { activeStatus: 1 },
-      include: {
-        vehicleModel: true,
-        stocks: true,
+    const { page, limit, skip } = parsePagination(req.query);
+    const where = buildPartCatalogWhere(req.query);
+
+    const [total, parts] = await Promise.all([
+      prisma.part.count({ where }),
+      prisma.part.findMany({
+        where,
+        include: partInclude,
+        orderBy: [
+          { vehicleModel: { make: { name: "asc" } } },
+          { vehicleModel: { name: "asc" } },
+          { name: "asc" },
+        ],
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    res.json({
+      data: parts.map(mapPartRecord),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
       },
-      orderBy: { name: "asc" },
     });
-    res.json(parts);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -229,7 +295,10 @@ export const createPart = async (req, res) => {
       return res.status(400).json({ message: "Name and vehicle model are required" });
     }
 
-    const model = await prisma.vehicleModel.findUnique({ where: { id: vehicleModelId } });
+    const model = await prisma.vehicleModel.findUnique({
+      where: { id: vehicleModelId },
+      include: { make: true },
+    });
     if (!model) {
       return res.status(400).json({ message: "Vehicle model not found" });
     }
@@ -240,10 +309,10 @@ export const createPart = async (req, res) => {
         description: description?.trim() || null,
         vehicleModelId,
       },
-      include: { vehicleModel: true, stocks: true },
+      include: partInclude,
     });
 
-    res.status(201).json(part);
+    res.status(201).json(mapPartRecord(part));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -273,9 +342,9 @@ export const updatePart = async (req, res) => {
     const part = await prisma.part.update({
       where: { id },
       data,
-      include: { vehicleModel: true, stocks: true },
+      include: partInclude,
     });
-    res.json(part);
+    res.json(mapPartRecord(part));
   } catch (err) {
     if (err.code === "P2025") {
       return res.status(404).json({ message: "Part not found" });
@@ -292,9 +361,10 @@ export const deletePart = async (req, res) => {
     const part = await prisma.part.update({
       where: { id },
       data: { activeStatus: 0 },
+      include: partInclude,
     });
 
-    res.json({ message: "Part marked as inactive", part });
+    res.json({ message: "Part marked as inactive", part: mapPartRecord(part) });
   } catch (err) {
     if (err.code === "P2025") {
       return res.status(404).json({ message: "Part not found" });
@@ -305,17 +375,40 @@ export const deletePart = async (req, res) => {
 
 // ─── Stock ───────────────────────────────────────────────────────────────────
 
-export const listStock = async (_req, res) => {
+export const listStock = async (req, res) => {
   try {
-    const data = await prisma.stock.findMany({
-      include: {
-        part: {
-          include: { vehicleModel: true },
-        },
+    const { page, limit, skip } = parsePagination(req.query);
+    const partWhere = buildPartCatalogWhere(req.query);
+    const where = { part: partWhere };
+    const availability = req.query.availability;
+    if (availability === "out") where.quantity = 0;
+    else if (availability === "low") where.quantity = { gt: 0, lte: 2 };
+    else if (availability === "ok") where.quantity = { gt: 2 };
+
+    const [total, data] = await Promise.all([
+      prisma.stock.count({ where }),
+      prisma.stock.findMany({
+        where,
+        include: stockInclude,
+        orderBy: [
+          { part: { vehicleModel: { make: { name: "asc" } } } },
+          { part: { vehicleModel: { name: "asc" } } },
+          { part: { name: "asc" } },
+        ],
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    res.json({
+      data: data.map(mapStockRecord),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
       },
-      orderBy: { part: { name: "asc" } },
     });
-    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -346,10 +439,10 @@ export const createStock = async (req, res) => {
         quantity: Number(quantity),
         price: Number(price),
       },
-      include: { part: { include: { vehicleModel: true } } },
+      include: stockInclude,
     });
 
-    res.status(201).json(stock);
+    res.status(201).json(mapStockRecord(stock));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -368,10 +461,10 @@ export const updateStock = async (req, res) => {
     const stock = await prisma.stock.update({
       where: { id },
       data,
-      include: { part: { include: { vehicleModel: true } } },
+      include: stockInclude,
     });
 
-    res.json(stock);
+    res.json(mapStockRecord(stock));
   } catch (err) {
     if (err.code === "P2025") {
       return res.status(404).json({ message: "Stock record not found" });
@@ -393,10 +486,10 @@ export const upsertStockByPart = async (req, res) => {
       where: { partId },
       update: { quantity: Number(quantity), price: Number(price) },
       create: { partId, quantity: Number(quantity), price: Number(price) },
-      include: { part: { include: { vehicleModel: true } } },
+      include: stockInclude,
     });
 
-    res.json(stock);
+    res.json(mapStockRecord(stock));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -422,7 +515,7 @@ export const getInventory = listStock;
 export const getInventoryDashboard = async (_req, res) => {
   try {
     const rows = await prisma.stock.findMany({
-      include: { part: { include: { vehicleModel: true } } },
+      include: { part: { include: { vehicleModel: { include: { make: true } } } } },
       orderBy: { part: { name: "asc" } },
     });
 
@@ -430,7 +523,7 @@ export const getInventoryDashboard = async (_req, res) => {
       id: s.id,
       partId: s.partId,
       partName: s.part.name,
-      vehicleModel: s.part.vehicleModel.name,
+      vehicleModel: vehicleModelFullName(s.part.vehicleModel),
       quantity: s.quantity,
       price: s.price,
       value: s.quantity * s.price,

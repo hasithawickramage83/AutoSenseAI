@@ -1,6 +1,17 @@
 import { prisma } from "../config/db.js";
 import { parseIntId } from "../utils/parseId.js";
 import { addActivityLog } from "../utils/activityLog.js";
+import { mapVehicleModel } from "../utils/vehicleCatalog.js";
+
+const vendorInclude = {
+  makes: { include: { make: true } },
+  vehicleModels: { include: { vehicleModel: { include: { make: true } } } },
+};
+
+function parseIdList(values) {
+  if (!Array.isArray(values)) return null;
+  return [...new Set(values.map((v) => parseIntId(v)).filter((id) => id != null))];
+}
 
 function mapVendor(v) {
   return {
@@ -13,7 +24,52 @@ function mapVendor(v) {
     status: v.status,
     createdAt: v.createdAt.getTime(),
     updatedAt: v.updatedAt.getTime(),
+    makes: (v.makes ?? []).map((vm) => ({
+      id: String(vm.make.id),
+      name: vm.make.name,
+    })),
+    vehicleModels: (v.vehicleModels ?? []).map((vv) =>
+      mapVehicleModel({ ...vv.vehicleModel, make: vv.vehicleModel.make }),
+    ),
   };
+}
+
+async function syncVendorCatalog(vendorId, makeIds, vehicleModelIds) {
+  if (makeIds !== null) {
+    await prisma.vendorMake.deleteMany({ where: { vendorId } });
+    if (makeIds.length > 0) {
+      await prisma.vendorMake.createMany({
+        data: makeIds.map((makeId) => ({ vendorId, makeId })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  if (vehicleModelIds !== null) {
+    await prisma.vendorVehicleModel.deleteMany({ where: { vendorId } });
+    if (vehicleModelIds.length > 0) {
+      await prisma.vendorVehicleModel.createMany({
+        data: vehicleModelIds.map((vehicleModelId) => ({ vendorId, vehicleModelId })),
+        skipDuplicates: true,
+      });
+    }
+  }
+}
+
+async function validateCatalogIds(makeIds, vehicleModelIds) {
+  if (makeIds?.length) {
+    const count = await prisma.vehicleMake.count({ where: { id: { in: makeIds } } });
+    if (count !== makeIds.length) {
+      return "One or more vehicle makes are invalid";
+    }
+  }
+  if (vehicleModelIds?.length) {
+    const count = await prisma.vehicleModel.count({ where: { id: { in: vehicleModelIds } } });
+    if (count !== vehicleModelIds.length) {
+      return "One or more vehicle models are invalid";
+    }
+  }
+  return null;
 }
 
 export const listVendors = async (req, res) => {
@@ -53,6 +109,7 @@ export const listVendors = async (req, res) => {
       prisma.vendor.count({ where }),
       prisma.vendor.findMany({
         where,
+        include: vendorInclude,
         orderBy: { [sortField]: sortOrder },
         skip,
         take: limitNum,
@@ -78,7 +135,10 @@ export const getVendor = async (req, res) => {
     const id = parseIntId(req.params.id);
     if (id == null) return res.status(400).json({ message: "Invalid vendor id" });
 
-    const vendor = await prisma.vendor.findUnique({ where: { id } });
+    const vendor = await prisma.vendor.findUnique({
+      where: { id },
+      include: vendorInclude,
+    });
     if (!vendor) return res.status(404).json({ message: "Vendor not found" });
 
     res.json(mapVendor(vendor));
@@ -89,13 +149,27 @@ export const getVendor = async (req, res) => {
 
 export const createVendor = async (req, res) => {
   try {
-    const { companyName, contactPerson, email, address, contactNumber, status } = req.body;
+    const {
+      companyName,
+      contactPerson,
+      email,
+      address,
+      contactNumber,
+      status,
+      makeIds = [],
+      vehicleModelIds = [],
+    } = req.body;
 
     if (!companyName?.trim() || !contactPerson?.trim() || !email?.trim()) {
       return res.status(400).json({
         message: "Company name, contact person, and email are required",
       });
     }
+
+    const parsedMakeIds = parseIdList(makeIds) ?? [];
+    const parsedModelIds = parseIdList(vehicleModelIds) ?? [];
+    const catalogError = await validateCatalogIds(parsedMakeIds, parsedModelIds);
+    if (catalogError) return res.status(400).json({ message: catalogError });
 
     const vendor = await prisma.vendor.create({
       data: {
@@ -105,7 +179,14 @@ export const createVendor = async (req, res) => {
         address: address?.trim() || null,
         contactNumber: contactNumber?.trim() || null,
         status: status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
+        makes: parsedMakeIds.length
+          ? { create: parsedMakeIds.map((makeId) => ({ makeId })) }
+          : undefined,
+        vehicleModels: parsedModelIds.length
+          ? { create: parsedModelIds.map((vehicleModelId) => ({ vehicleModelId })) }
+          : undefined,
       },
+      include: vendorInclude,
     });
 
     await notifyAdminsVendorChange(req.user.userId, `Vendor added: ${vendor.companyName}`, "system");
@@ -127,7 +208,16 @@ export const updateVendor = async (req, res) => {
     const existing = await prisma.vendor.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ message: "Vendor not found" });
 
-    const { companyName, contactPerson, email, address, contactNumber, status } = req.body;
+    const {
+      companyName,
+      contactPerson,
+      email,
+      address,
+      contactNumber,
+      status,
+      makeIds,
+      vehicleModelIds,
+    } = req.body;
     const data = {};
     if (companyName?.trim()) data.companyName = companyName.trim();
     if (contactPerson?.trim()) data.contactPerson = contactPerson.trim();
@@ -136,7 +226,26 @@ export const updateVendor = async (req, res) => {
     if (contactNumber !== undefined) data.contactNumber = contactNumber?.trim() || null;
     if (status === "ACTIVE" || status === "INACTIVE") data.status = status;
 
-    const vendor = await prisma.vendor.update({ where: { id }, data });
+    const parsedMakeIds = parseIdList(makeIds);
+    const parsedModelIds = parseIdList(vehicleModelIds);
+    const catalogError = await validateCatalogIds(parsedMakeIds ?? [], parsedModelIds ?? []);
+    if (catalogError) return res.status(400).json({ message: catalogError });
+
+    const vendor = await prisma.vendor.update({ where: { id }, data, include: vendorInclude });
+
+    if (parsedMakeIds !== null || parsedModelIds !== null) {
+      await syncVendorCatalog(id, parsedMakeIds ?? [], parsedModelIds ?? []);
+      const refreshed = await prisma.vendor.findUnique({
+        where: { id },
+        include: vendorInclude,
+      });
+      const msg =
+        status === "INACTIVE" && existing.status !== "INACTIVE"
+          ? `Vendor deactivated: ${vendor.companyName}`
+          : `Vendor updated: ${vendor.companyName}`;
+      await notifyAdminsVendorChange(req.user.userId, msg, "system");
+      return res.json(mapVendor(refreshed));
+    }
 
     const msg =
       status === "INACTIVE" && existing.status !== "INACTIVE"

@@ -31,6 +31,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import workshopRoutes from "./routes/workshop.routes.js";
 import supplierRoutes from "./routes/supplier.routes.js";
 import vendorQuotationRoutes from "./routes/vendorQuotation.routes.js";
+import publicRoutes from "./routes/public.routes.js";
 
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
@@ -38,4 +39,5 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/workshop", workshopRoutes);
 app.use("/api/supplier", supplierRoutes);
 app.use("/api/vendor-quotation", vendorQuotationRoutes);
+app.use("/api/public", publicRoutes);
 export default app;

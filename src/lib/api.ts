@@ -39,7 +39,12 @@ function normalizeUser(u: ApiUser): ApiUser {
 }
 
 function normalizeVehicleModel(m: ApiVehicleModel): ApiVehicleModel {
-  return { ...m, id: String(m.id) };
+  return {
+    ...m,
+    id: String(m.id),
+    makeId: m.makeId != null ? String(m.makeId) : undefined,
+    fullName: m.fullName ?? (m.make?.name ? `${m.make.name} ${m.name}` : m.name),
+  };
 }
 
 function normalizeStock(s: ApiStock): ApiStock {
@@ -180,31 +185,102 @@ export async function deleteAdminUser(id: string) {
   return request<{ message: string }>(`/api/admin/users/${id}`, { method: "DELETE" });
 }
 
-// ─── Admin: Vehicle Models ───────────────────────────────────────────────────
+// ─── Admin: Vehicle Makes & Catalog ─────────────────────────────────────────
+
+export interface ApiVehicleMake {
+  id: string;
+  name: string;
+  modelCount?: number;
+  vendorCount?: number;
+}
 
 export interface ApiVehicleModel {
   id: string | number;
+  makeId?: string | number;
   name: string;
-  _count?: { parts: number };
+  fullName?: string;
+  make?: ApiVehicleMake;
+  _count?: { parts: number; vendors?: number };
 }
+
+export async function fetchVehicleMakes() {
+  const rows = await request<ApiVehicleMake[]>("/api/admin/vehicle-makes");
+  return rows.map((m) => ({ ...m, id: String(m.id) }));
+}
+
+export async function createVehicleMake(name: string) {
+  const row = await request<ApiVehicleMake>("/api/admin/vehicle-makes", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  return { ...row, id: String(row.id) };
+}
+
+export async function updateVehicleMake(id: string, name: string) {
+  const row = await request<ApiVehicleMake>(`/api/admin/vehicle-makes/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ name }),
+  });
+  return { ...row, id: String(row.id) };
+}
+
+export async function deleteVehicleMake(id: string) {
+  return request<{ message: string }>(`/api/admin/vehicle-makes/${id}`, { method: "DELETE" });
+}
+
+export async function fetchCatalogVehicleModels(makeId?: string) {
+  const qs = makeId ? `?makeId=${encodeURIComponent(makeId)}` : "";
+  const rows = await request<ApiVehicleModel[]>(`/api/admin/catalog-vehicle-models${qs}`);
+  return rows.map(normalizeVehicleModel);
+}
+
+export async function createCatalogVehicleModel(payload: { makeId: string; name: string }) {
+  const row = await request<ApiVehicleModel>("/api/admin/catalog-vehicle-models", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return normalizeVehicleModel(row);
+}
+
+export async function updateCatalogVehicleModel(
+  id: string,
+  payload: { makeId?: string; name?: string },
+) {
+  const row = await request<ApiVehicleModel>(`/api/admin/catalog-vehicle-models/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  return normalizeVehicleModel(row);
+}
+
+export async function deleteCatalogVehicleModel(id: string) {
+  return request<{ message: string }>(`/api/admin/catalog-vehicle-models/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// ─── Admin: Vehicle Models (parts catalog) ───────────────────────────────────
 
 export async function fetchVehicleModels() {
   const rows = await request<ApiVehicleModel[]>("/api/admin/vehicle-models");
   return rows.map(normalizeVehicleModel);
 }
 
-export async function createVehicleModel(name: string) {
+export async function createVehicleModel(payload: { makeId: string; name: string }) {
   const row = await request<ApiVehicleModel>("/api/admin/vehicle-models", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(payload),
   });
   return normalizeVehicleModel(row);
 }
 
-export async function updateVehicleModel(id: string, name: string) {
+export async function updateVehicleModel(
+  id: string,
+  payload: { makeId?: string; name?: string },
+) {
   const row = await request<ApiVehicleModel>(`/api/admin/vehicle-models/${id}`, {
     method: "PUT",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(payload),
   });
   return normalizeVehicleModel(row);
 }
@@ -225,9 +301,42 @@ export interface ApiPart {
   stocks: ApiStock[];
 }
 
-export async function fetchParts() {
-  const rows = await request<ApiPart[]>("/api/admin/parts");
-  return rows.map(normalizePart);
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface CatalogListParams {
+  makeId?: string;
+  vehicleModelId?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+  hasStock?: "true" | "false";
+  availability?: "ok" | "low" | "out";
+}
+
+function catalogQueryString(params?: CatalogListParams) {
+  const q = new URLSearchParams();
+  if (params?.makeId && params.makeId !== "all") q.set("makeId", params.makeId);
+  if (params?.vehicleModelId && params.vehicleModelId !== "all") {
+    q.set("vehicleModelId", params.vehicleModelId);
+  }
+  if (params?.search?.trim()) q.set("search", params.search.trim());
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.hasStock) q.set("hasStock", params.hasStock);
+  if (params?.availability) q.set("availability", params.availability);
+  const qs = q.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function fetchParts(params?: CatalogListParams) {
+  const res = await request<PaginatedResponse<ApiPart>>(`/api/admin/parts${catalogQueryString(params)}`);
+  return {
+    ...res,
+    data: res.data.map(normalizePart),
+  };
 }
 
 export async function createPart(payload: {
@@ -270,9 +379,12 @@ export interface ApiStock {
   part?: ApiPart & { vehicleModel?: ApiVehicleModel };
 }
 
-export async function fetchStock() {
-  const rows = await request<ApiStock[]>("/api/admin/stock");
-  return rows.map(normalizeStock);
+export async function fetchStock(params?: CatalogListParams) {
+  const res = await request<PaginatedResponse<ApiStock>>(`/api/admin/stock${catalogQueryString(params)}`);
+  return {
+    ...res,
+    data: res.data.map(normalizeStock),
+  };
 }
 
 export async function createStock(payload: { partId: string; quantity: number; price: number }) {
@@ -335,19 +447,35 @@ export async function fetchInventoryDashboard() {
 
 // ─── Workshop: Damage Processing ─────────────────────────────────────────────
 
+export interface DamageClarification {
+  mentioned: string;
+  partType?: string;
+  field?: string;
+  reason: string;
+  prompt: string;
+  fullLabel?: string;
+}
+
 export interface AnalyzeDamageResponse {
   aiResult: {
     vehicleModel: string | null;
     parts: string[];
+    clarificationsNeeded?: DamageClarification[];
   };
   vehicle: string;
   parts: string[];
   damages: string[];
   recommendations: string[];
+  clarificationsNeeded: DamageClarification[];
+  canSubmit: boolean;
   severity: string;
 }
 
-export async function analyzeDamagePreview(payload: { vehicle: string; description: string }) {
+export async function analyzeDamagePreview(payload: {
+  vehicleModel: string;
+  vehicleNumber: string;
+  description: string;
+}) {
   return request<AnalyzeDamageResponse>("/api/ai/analyze", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -381,7 +509,8 @@ export interface ProcessDamageResponse {
 }
 
 export async function processDamage(payload: {
-  vehicle: string;
+  vehicleModel: string;
+  vehicleNumber: string;
   description: string;
   selectedParts: string[];
 }) {
@@ -393,6 +522,17 @@ export async function processDamage(payload: {
 
 export async function fetchWorkshopVehicleModels() {
   return request<{ id: string; name: string }[]>("/api/workshop/vehicle-models");
+}
+
+export async function fetchWorkshopVehicleMakes() {
+  const rows = await request<ApiVehicleMake[]>("/api/workshop/vehicle-makes");
+  return rows.map((m) => ({ ...m, id: String(m.id) }));
+}
+
+export async function fetchWorkshopCatalogVehicleModels(makeId?: string) {
+  const qs = makeId ? `?makeId=${encodeURIComponent(makeId)}` : "";
+  const rows = await request<ApiVehicleModel[]>(`/api/workshop/catalog-vehicle-models${qs}`);
+  return rows.map(normalizeVehicleModel);
 }
 
 export async function fetchWorkshopQuotations() {
@@ -707,6 +847,8 @@ export interface ApiVendor {
   status: "ACTIVE" | "INACTIVE";
   createdAt: number;
   updatedAt: number;
+  makes?: ApiVehicleMake[];
+  vehicleModels?: ApiVehicleModel[];
 }
 
 export interface PaginatedVendors {
@@ -744,6 +886,8 @@ export async function createVendor(payload: {
   address?: string;
   contactNumber?: string;
   status?: "ACTIVE" | "INACTIVE";
+  makeIds?: string[];
+  vehicleModelIds?: string[];
 }) {
   return request<ApiVendor>("/api/admin/vendors", {
     method: "POST",
@@ -760,6 +904,8 @@ export async function updateVendor(
     address: string;
     contactNumber: string;
     status: "ACTIVE" | "INACTIVE";
+    makeIds: string[];
+    vehicleModelIds: string[];
   }>,
 ) {
   return request<ApiVendor>(`/api/admin/vendors/${id}`, {
@@ -916,6 +1062,32 @@ export async function submitVendorResponse(
   },
 ) {
   return request<{ message: string }>(`/api/vendor-quotation/${token}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Public vendor self-registration — no auth */
+export async function fetchPublicVendorCatalog() {
+  return request<{
+    makes: {
+      id: string;
+      name: string;
+      models: ApiVehicleModel[];
+    }[];
+  }>("/api/public/vendor-catalog");
+}
+
+export async function registerVendorPublic(payload: {
+  companyName: string;
+  contactPerson: string;
+  email: string;
+  address?: string;
+  contactNumber?: string;
+  makeIds: string[];
+  vehicleModelIds: string[];
+}) {
+  return request<{ message: string; vendorId: string }>("/api/public/vendor-register", {
     method: "POST",
     body: JSON.stringify(payload),
   });

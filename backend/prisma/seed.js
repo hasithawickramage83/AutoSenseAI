@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import dotenv from "dotenv";
 import { directDatabaseUrl } from "../src/config/databaseUrl.js";
+import { splitMakeModel } from "../src/utils/vehicleCatalog.js";
 
 dotenv.config();
 
@@ -223,13 +224,75 @@ const CATALOG_PARTS = [
   "Chrome Trim Rear",
 ];
 
-async function seedCatalog() {
-  for (const name of VEHICLE_MODELS) {
-    const model = await prisma.vehicleModel.upsert({
-      where: { name },
-      update: {},
-      create: { name },
+async function migrateLegacyVehicleModels() {
+  let models = [];
+  try {
+    models = await prisma.vehicleModel.findMany({
+      where: { makeId: null },
     });
+  } catch {
+    return;
+  }
+
+  if (!models.length) return;
+
+  for (const model of models) {
+    if (!model.name.includes(" ")) continue;
+    const { make, model: modelName } = splitMakeModel(model.name);
+    if (!make || !modelName) continue;
+
+    const makeRecord = await prisma.vehicleMake.upsert({
+      where: { name: make },
+      update: {},
+      create: { name: make },
+    });
+
+    const existing = await prisma.vehicleModel.findFirst({
+      where: { makeId: makeRecord.id, name: modelName },
+    });
+
+    if (existing && existing.id !== model.id) {
+      await prisma.part.updateMany({
+        where: { vehicleModelId: model.id },
+        data: { vehicleModelId: existing.id },
+      });
+      await prisma.vendorVehicleModel.updateMany({
+        where: { vehicleModelId: model.id },
+        data: { vehicleModelId: existing.id },
+      }).catch(() => {});
+      await prisma.vehicleModel.delete({ where: { id: model.id } });
+      continue;
+    }
+
+    await prisma.vehicleModel.update({
+      where: { id: model.id },
+      data: { makeId: makeRecord.id, name: modelName },
+    });
+  }
+
+  console.log(`Migrated ${models.length} legacy vehicle model(s) to make + model structure.`);
+}
+
+async function upsertCatalogModel(fullName) {
+  const { make, model: modelName } = splitMakeModel(fullName);
+  const makeRecord = await prisma.vehicleMake.upsert({
+    where: { name: make },
+    update: {},
+    create: { name: make },
+  });
+
+  return prisma.vehicleModel.upsert({
+    where: { makeId_name: { makeId: makeRecord.id, name: modelName } },
+    update: {},
+    create: { makeId: makeRecord.id, name: modelName },
+  });
+}
+
+async function seedCatalog() {
+  await migrateLegacyVehicleModels();
+
+  for (const name of VEHICLE_MODELS) {
+    const model = await upsertCatalogModel(name);
 
     const existingParts = await prisma.part.findMany({
       where: {

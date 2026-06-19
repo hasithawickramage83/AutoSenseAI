@@ -1,4 +1,5 @@
 import { prisma } from "../config/db.js";
+import { vehicleModelFullName } from "../utils/vehicleCatalog.js";
 import { processQuotationById } from "../services/quotation.processor.js";
 import { sendInvoiceEmail } from "../services/email.service.js";
 import { addActivityLog } from "../utils/activityLog.js";
@@ -184,7 +185,10 @@ export const getStock = async (req, res) => {
 export const getStockFilters = async (_req, res) => {
   try {
     const [vehicleModels, partNames] = await Promise.all([
-      prisma.vehicleModel.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+      prisma.vehicleModel.findMany({
+        orderBy: [{ make: { name: "asc" } }, { name: "asc" }],
+        include: { make: true },
+      }),
       prisma.part.findMany({
         where: { activeStatus: 1 },
         distinct: ["name"],
@@ -193,7 +197,7 @@ export const getStockFilters = async (_req, res) => {
       }),
     ]);
     res.json({
-      vehicleModels: vehicleModels.map((m) => m.name),
+      vehicleModels: vehicleModels.map((m) => vehicleModelFullName(m)),
       partNames: partNames.map((p) => p.name),
     });
   } catch (error) {

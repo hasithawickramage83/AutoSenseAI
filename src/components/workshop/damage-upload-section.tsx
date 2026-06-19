@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore, type DamagePhoto } from "@/lib/store";
-import { analyzeDamagePreview, processDamage, fetchWorkshopVehicleModels, ApiError } from "@/lib/api";
+import {
+  analyzeDamagePreview,
+  processDamage,
+  fetchWorkshopVehicleMakes,
+  fetchWorkshopCatalogVehicleModels,
+  ApiError,
+  type DamageClarification,
+} from "@/lib/api";
+import { VehicleMakeModelFields } from "@/components/admin/vehicle-make-model-fields";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SeverityBadge } from "./status-badge";
@@ -34,14 +36,18 @@ interface DamageReportView {
   damages: string[];
   recommendations: string[];
   severity: "Low" | "Medium" | "High";
+  clarificationsNeeded: DamageClarification[];
+  canSubmit: boolean;
   quotationId?: string;
 }
 
 export function DamageUploadSection({ onDone }: { onDone: () => void }) {
   const { state, addLog, refreshWorkshopData } = useStore();
   const [photos, setPhotos] = useState<DamagePhoto[]>([]);
-  const [vehicleModels, setVehicleModels] = useState<{ id: string; name: string }[]>([]);
-  const [vehicle, setVehicle] = useState("");
+  const [makeId, setMakeId] = useState("");
+  const [vehicleModelId, setVehicleModelId] = useState("");
+  const [vehicleNumber, setVehicleNumber] = useState("");
+  const [vehicleFullName, setVehicleFullName] = useState("");
   const [description, setDescription] = useState(
     "Front bumper smashed in motorway accident. Headlight cracked.",
   );
@@ -56,19 +62,39 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
 
   const previousUploads = [...state.quotations].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6);
 
+  const vehicleDetailsReady = Boolean(vehicleFullName.trim() && vehicleNumber.trim());
+
   useEffect(() => {
-    fetchWorkshopVehicleModels()
-      .then((models) => {
-        setVehicleModels(models);
-        setVehicle((current) => {
-          if (current) return current;
-          const preferred =
-            models.find((m) => m.name.toLowerCase() === "toyota c-hr") ?? models[0];
-          return preferred?.name ?? "";
-        });
+    Promise.all([fetchWorkshopVehicleMakes(), fetchWorkshopCatalogVehicleModels()])
+      .then(([makes, models]) => {
+        const toyota = makes.find((m) => m.name.toLowerCase() === "toyota");
+        if (!toyota) return;
+        const chr = models.find(
+          (m) => String(m.makeId) === String(toyota.id) && m.name.toLowerCase() === "c-hr",
+        );
+        setMakeId((current) => current || toyota.id);
+        if (chr) {
+          setVehicleModelId((current) => current || String(chr.id));
+        }
       })
-      .catch(() => toast.error("Failed to load vehicle models"));
+      .catch(() => toast.error("Failed to load vehicle catalog"));
   }, []);
+
+  useEffect(() => {
+    if (!vehicleModelId) {
+      setVehicleFullName("");
+      return;
+    }
+    fetchWorkshopCatalogVehicleModels(makeId)
+      .then((models) => {
+        const model = models.find((m) => String(m.id) === String(vehicleModelId));
+        const full =
+          model?.fullName ??
+          (model?.make?.name && model?.name ? `${model.make.name} ${model.name}` : "");
+        setVehicleFullName(full.trim());
+      })
+      .catch(() => setVehicleFullName(""));
+  }, [makeId, vehicleModelId]);
 
   function togglePart(part: string) {
     setSelectedParts((prev) => {
@@ -104,7 +130,7 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
   }
 
   useEffect(() => {
-    if (!description.trim() || !state.user || !vehicle.trim()) {
+    if (!description.trim() || !state.user || !vehicleDetailsReady) {
       setReport(null);
       setSelectedParts(new Set());
       quotationSavedRef.current = false;
@@ -115,13 +141,19 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
     const timer = setTimeout(async () => {
       setScanning(true);
       try {
-        const data = await analyzeDamagePreview({ vehicle, description });
+        const data = await analyzeDamagePreview({
+          vehicleModel: vehicleFullName,
+          vehicleNumber,
+          description,
+        });
         const parts = data.parts ?? [];
         setReport({
           parts,
           damages: data.damages,
           recommendations: data.recommendations,
           severity: data.severity as "Low" | "Medium" | "High",
+          clarificationsNeeded: data.clarificationsNeeded ?? [],
+          canSubmit: data.canSubmit ?? parts.length > 0,
         });
         setSelectedParts(new Set(parts));
       } catch (err) {
@@ -137,11 +169,15 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [vehicle, description, state.user]);
+  }, [vehicleFullName, vehicleNumber, description, state.user, vehicleDetailsReady]);
 
   async function runAnalysis() {
-    if (!vehicle.trim()) {
-      toast.error("Select a vehicle make / model");
+    if (!makeId || !vehicleModelId) {
+      toast.error("Select vehicle make and model");
+      return;
+    }
+    if (!vehicleNumber.trim()) {
+      toast.error("Enter the vehicle number");
       return;
     }
     if (!description.trim()) {
@@ -160,11 +196,16 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
       toast.error("Select at least one part for the quotation");
       return;
     }
+    if (report.clarificationsNeeded.length > 0 || !report.canSubmit) {
+      toast.error("Update the damage description with the missing details before submitting");
+      return;
+    }
     setAnalyzing(true);
     addLog("AI started analyzing vehicle damage", "ai");
     try {
       const data = await processDamage({
-        vehicle,
+        vehicleModel: vehicleFullName,
+        vehicleNumber: vehicleNumber.trim().toUpperCase(),
         description,
         selectedParts: Array.from(selectedParts),
       });
@@ -208,18 +249,22 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
     onDone();
   }
 
-  const selectedReportItems = report
-    ? report.parts
-        .filter((p) => selectedParts.has(p))
-        .map((part) => {
-          const idx = report.parts.indexOf(part);
-          return {
-            part,
-            damage: report.damages[idx] ?? part,
-            recommendation: report.recommendations[idx] ?? `Replace ${part}`,
-          };
-        })
-    : [];
+  const selectedReportItems = useMemo(
+    () =>
+      report
+        ? report.parts
+            .filter((p) => selectedParts.has(p))
+            .map((part) => {
+              const idx = report.parts.indexOf(part);
+              return {
+                part,
+                damage: report.damages[idx] ?? part,
+                recommendation: report.recommendations[idx] ?? `Replace ${part}`,
+              };
+            })
+        : [],
+    [report, selectedParts],
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -238,20 +283,30 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
                 <Car className="h-4 w-4 text-[var(--workshop-primary)]" />
                 Vehicle information
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="vehicle">Vehicle make / model</Label>
-                <Select value={vehicle || undefined} onValueChange={setVehicle}>
-                  <SelectTrigger id="vehicle" className="bg-white">
-                    <SelectValue placeholder="Select vehicle model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vehicleModels.map((m) => (
-                      <SelectItem key={m.id} value={m.name}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-4">
+                <VehicleMakeModelFields
+                  makeId={makeId}
+                  vehicleModelId={vehicleModelId}
+                  onMakeIdChange={setMakeId}
+                  onVehicleModelIdChange={setVehicleModelId}
+                  makeLabel="Vehicle make"
+                  modelLabel="Vehicle model"
+                  required
+                  apiSource="workshop"
+                />
+                <div className="space-y-2">
+                  <Label htmlFor="vehicle-number">
+                    Vehicle number <span className="text-red-600">*</span>
+                  </Label>
+                  <Input
+                    id="vehicle-number"
+                    placeholder="e.g. QAY557"
+                    value={vehicleNumber}
+                    onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
+                    className="bg-white uppercase"
+                    required
+                  />
+                </div>
               </div>
             </div>
 
@@ -327,7 +382,7 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="bg-white resize-none"
-                placeholder="Describe visible damage, location, and any notes for assessors…"
+                placeholder="Describe visible damage with side/position, e.g. front bumper smashed, left headlight cracked…"
               />
             </div>
           </CardContent>
@@ -355,11 +410,35 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
             )}
             {!scanning && !analyzing && !report && (
               <div className="py-16 text-center text-sm text-slate-400">
-                Enter a damage description to see detected parts.
+                {vehicleDetailsReady
+                  ? "Enter a damage description to see detected parts."
+                  : "Select vehicle make, model, and enter the vehicle number to continue."}
               </div>
             )}
             {!scanning && !analyzing && report && !report.quotationId && (
               <div className="space-y-5">
+                {report.clarificationsNeeded.length > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+                    <div className="mb-2 flex items-center gap-2 font-medium">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                      More detail needed before submitting
+                    </div>
+                    <p className="mb-3 text-sm text-amber-900/90">
+                      Update your damage description on the left, then wait for the scan to refresh.
+                    </p>
+                    <ul className="space-y-2 text-sm">
+                      {report.clarificationsNeeded.map((item) => (
+                        <li
+                          key={item.mentioned}
+                          className="rounded-lg border border-amber-200/80 bg-white/70 px-3 py-2"
+                        >
+                          <p className="font-medium capitalize">{item.mentioned}</p>
+                          <p className="text-amber-900/80">{item.prompt}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Parts to quote</span>
@@ -368,7 +447,11 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
                     </span>
                   </div>
                   {report.parts.length === 0 ? (
-                    <p className="text-sm text-slate-400">No parts detected. Try a more detailed description.</p>
+                    <p className="text-sm text-slate-400">
+                      {report.clarificationsNeeded.length > 0
+                        ? "No complete parts detected yet — add the missing details above."
+                        : "No parts detected. Try a more detailed description."}
+                    </p>
                   ) : (
                     <ul className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/50 p-3">
                       {report.parts.map((part) => (
@@ -413,12 +496,24 @@ export function DamageUploadSection({ onDone }: { onDone: () => void }) {
                 </div>
                 <Button
                   onClick={runAnalysis}
-                  disabled={analyzing || selectedParts.size === 0 || report.parts.length === 0}
+                  disabled={
+                    analyzing ||
+                    selectedParts.size === 0 ||
+                    report.parts.length === 0 ||
+                    !vehicleDetailsReady ||
+                    report.clarificationsNeeded.length > 0 ||
+                    !report.canSubmit
+                  }
                   className="w-full bg-[var(--workshop-primary)] hover:bg-[var(--workshop-primary-dark)]"
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
                   Run AI analysis
                 </Button>
+                {report.clarificationsNeeded.length > 0 && (
+                  <p className="text-center text-xs text-amber-700">
+                    Example: &quot;Front bumper smashed. Left headlight and right tail light cracked. Side mirror damaged.&quot;
+                  </p>
+                )}
               </div>
             )}
             {!scanning && !analyzing && report?.quotationId && (
